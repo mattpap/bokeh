@@ -116,6 +116,7 @@ class PandasPlotSource(ColumnDataSource):
 
 class PandasPivotTable(PlotObject):
     source = Instance(has_ref=True)
+    columns = List()
     sort = List()
     group = List()
     offset = Int(default=0)
@@ -126,6 +127,7 @@ class PandasPivotTable(PlotObject):
     tabledata = Dict()
     filterselected = Bool(default=False)
     def setup_events(self):
+        self.on_change('columns', self, 'get_data')
         self.on_change('sort', self, 'get_data')
         self.on_change('group', self, 'get_data')
         self.on_change('length', self, 'get_data')
@@ -157,12 +159,12 @@ class PandasPivotTable(PlotObject):
                     data[idx] = "%%.%df" % precision.get(colname,2)%data[idx]
 
     def transform(self):
-        return dict(sort=self.sort,
+        return dict(columns=self.columns,
+                    sort=self.sort,
                     group=self.group,
                     offset=self.offset,
                     length=self.length,
-                    filterselected=self.filterselected,
-                    )
+                    filterselected=self.filterselected)
 
     def setselect(self, select):
         self.source.setselect(select, self.transform())
