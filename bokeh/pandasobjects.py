@@ -30,6 +30,13 @@ class IPythonRemoteData(PlotObject):
     selected = Int(0)
     data = Int(0)
 
+    # from IPython.kernel import KernelManager
+    # kernel = KernelManager(connection_file="kernel-1.json")
+    # kernel.load_connection_file()
+    # client = kernel.client()
+    # client.start_channels()
+    # client.shell_channel.execute("x = 1", store_history=False)
+
     def _url(self, func=None):
         remotedata = self
         func = "/" + func if func is not None else ""
