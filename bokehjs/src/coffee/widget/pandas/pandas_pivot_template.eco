@@ -32,7 +32,7 @@
   </label>
   <input type="text" class="search input-large"/>
   <% end %>
-  
+
   <% if @tablecontrolstate == 'computed': %>
   <table class="table">
     <thead>
@@ -54,7 +54,7 @@
         <%= computed_column.code %>
       </td>
       <td>
-        <a class="column_del" 
+        <a class="column_del"
            name="<%= computed_column.name %>" href="#">[delete]</a>
       </td>
     </tr>
@@ -71,7 +71,7 @@
     </tr>
   </table>
   <% end %>
-  
+
 </form>
 
 <table class="bokehdatatable table table-bordered"
@@ -87,31 +87,30 @@
     <% end %>
     <th>index</th>
     <% for column in @columns: %>
-    <% if not @skip[column]: %>
-    <th><a class="pandascolumn"><%= column %></a>
-      
-      <% if @sort_ascendings[column] == true: %>
-      <i class="icon-caret-up"></i>
-      <% else if @sort_ascendings[column] == false: %>
-      <i class="icon-caret-down"></i>
+      <% if not @skip[column]: %>
+        <th style="white-space: nowrap;">
+          <a class="pandascolumn"><%= column %></a>
+          <% if @sort_ascendings[column] == true: %>
+            <i class="icon-caret-up"></i>
+          <% else if @sort_ascendings[column] == false: %>
+            <i class="icon-caret-down"></i>
+          <% end %>
+        </th>
       <% end %>
-      
-      <% end %>
-    </th>
     <% end %>
   </thead>
   <% for idx in _.range(@length): %>
   <tr class="pandasrow" rownum="<%= idx %>">
     <% if @selected and @selected[idx]: %>
-      <td style="background-color:<%= @colors[idx] %>"> 
+      <td style="background-color:<%= @colors[idx] %>">
         <%= @selected[idx] %>/<%= @counts[idx] %>
-      </td>      
+      </td>
     <% else: %>
       <td> <%= @counts[idx] %> </td>
     <% end %>
     <td> <%= @index[idx] %> </td>
     <% for column in @columns: %>
-      <% if not @skip[column]: %>    
+      <% if not @skip[column]: %>
       <td> <%= @data[column][idx] %> </td>
       <% end %>
     <% end %>
@@ -124,12 +123,12 @@
       <button class="btn btn-mini">First</button>
       <button class="btn btn-mini">Previous</button>
       <button class="btn btn-mini">Next</button>
-      <button class="btn btn-mini">Last</button>  
+      <button class="btn btn-mini">Last</button>
     </div>
     <div class="paginatedisplay">
       Show <input type="text" class="pandassize" value="<%= @length %>"> records
       From <input type="text" class="pandasoffset" value="<%= @offset %>">
-      to <%= @length + @offset %> - 
+      to <%= @length + @offset %> -
       Total : <%= @totallength %>
     </div>
   </center>
