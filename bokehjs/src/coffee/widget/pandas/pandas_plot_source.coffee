@@ -1,5 +1,3 @@
-
-
 define [
   "backbone",
   "source/column_data_source"
