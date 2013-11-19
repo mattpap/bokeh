@@ -206,8 +206,10 @@ define [
       @$el.html(html)
       @$el.addClass("bokehtable")
       @$el.find(".bokehdatatable > thead > tr").sortable(
-        stop: (event, ui) ->
-          console.log(ui)
+        stop: (event, ui) =>
+          columns = _.map(@$el.find(".pandascolumn"), (el) -> $(el).text())
+          console.log(columns)
+          @model.save('columns', columns, {'wait': true})
       )
 
       @$(".pandasagg")
@@ -284,6 +286,7 @@ define [
 
     defaults: () ->
       return {
+        columns: []
         sort: []
         group: []
         agg: 'sum'
@@ -291,7 +294,6 @@ define [
         length: 100
         maxlength: 1000
         tabledata: null
-        columns_names: []
         width: null
         tablecontrolstate: 'groupby'
       }
