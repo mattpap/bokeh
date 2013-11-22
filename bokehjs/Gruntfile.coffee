@@ -110,17 +110,17 @@ module.exports = (grunt) ->
         shim:
           sprintf:
             exports: 'sprintf'
-        include: ['main', 'underscore']
+        include: ['main']
         fileExclusionRegExp: /^test/
         wrap: {
           startFile: 'src/js/_start.js.frag',
           endFile: 'src/js/_end.js.frag'
         }
-      dist:
+      production:
         options:
           optimize: "uglify2"
           out: 'build/bokeh.min.js'
-      dev:
+      development:
         options:
           optimize: "none"
           out: 'build/bokeh.js'
@@ -177,5 +177,4 @@ module.exports = (grunt) ->
 
   grunt.registerTask("default",    ["build", "qunit"])
   grunt.registerTask("build",      ["coffee", "less", "copy", "eco"])
-  grunt.registerTask("deploy",     ["build",  "requirejs:dist"])
-  grunt.registerTask("devdeploy",  ["build",  "requirejs:dev"])
+  grunt.registerTask("deploy",     ["build", "requirejs"])
