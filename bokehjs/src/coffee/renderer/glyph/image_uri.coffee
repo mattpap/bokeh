@@ -21,8 +21,9 @@ define [
       [@sx, @sy] = @plot_view.map_to_screen(@x, @glyph_props.x.units, @y, @glyph_props.y.units)
 
     _render: (ctx, indices, glyph_props) ->
-      for i in indices
+      vs = @plot_view.view_state
 
+      for i in indices
         if isNaN(@sx[i] + @sy[i]+ @angle[i])
           continue
 
@@ -44,7 +45,6 @@ define [
               ctx.restore()
           img.src = @url[i]
           @need_load[i] = false
-
         else if @loaded[i]
           @_render_image(ctx, vs, i, @image[i])
 
