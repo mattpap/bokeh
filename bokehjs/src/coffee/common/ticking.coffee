@@ -381,7 +381,13 @@ define [
               break
           else
             for i in [0..ticks.length-1]
-              labels[i] = ticks[i].toPrecision(x).replace(/(\.[0-9]*?)0+$/, "$1").replace(/\.$/, "")
+              if ticks[i] % 1 == 0
+                precision = undefined
+              else
+                precision = x
+              labels[i] = ticks[i].toPrecision(precision)
+                                  .replace(/(\.[0-9]*?)0+$/, "$1")
+                                  .replace(/\.$/, "")
               if i > 0
                 if labels[i] == labels[i-1]
                   is_ok = false
