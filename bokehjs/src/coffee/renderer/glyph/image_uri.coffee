@@ -51,14 +51,16 @@ define [
       ctx.restore()
 
     _render_image: (ctx, vs, i, img) ->
+      w = vs.get('inner_width')
+      h = vs.get('inner_height')
       if @angle[i]
         ctx.translate(@sx[i], @sy[i])
         ctx.rotate(@angle[i])
-        ctx.drawImage(img, 0, 0);
+        ctx.drawImage(img, 0, 0, w, h)
         ctx.rotate(-@angle[i])
         ctx.translate(-@sx[i], -@sy[i])
       else
-        ctx.drawImage(img, @sx[i], @sy[i]);
+        ctx.drawImage(img, @sx[i], @sy[i], w, h)
 
   # name Image conflicts with js Image
   class ImageURIGlyph extends Glyph.Model
