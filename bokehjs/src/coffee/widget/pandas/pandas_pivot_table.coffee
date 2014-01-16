@@ -8,7 +8,7 @@ define [
 
   ENTER = 13
 
-  class PandasPivotView extends ContinuumView.View
+  class PandasTableView extends ContinuumView.View
 
     template: pandaspivot
 
@@ -219,6 +219,43 @@ define [
         .find("option[value=\"#{@mget('tablecontrolstate')}\"]")
         .attr('selected', 'selected')
 
+  class CoffeePivotView extends ContinuumView.View
+
+    # template: pandaspivot
+
+    initialize: (options) ->
+      super(options)
+      @listenTo(@model, 'destroy', @remove)
+      @listenTo(@model, 'change', @render)
+      @render()
+
+    #events:
+    #  "keyup .pandasgroup": 'pandasgroup'
+
+    render: () ->
+      tabledata = @mget('tabledata')
+      exclude = ["_counts", "_selected", "index"]
+      columns = _.difference(tabledata.column_names, exclude)
+      data = tabledata.data
+      dataset = [columns].concat(_.zip.apply(this, data[column] for column in columns))
+      @$el.pivotUI(dataset, {cols: [], rows: [], vals: []})
+
+  class PandasPivotView extends ContinuumView.View
+
+    # template: pandaspivot
+
+    initialize: (options) ->
+      super(options)
+      @listenTo(@model, 'destroy', @remove)
+      @listenTo(@model, 'change', @render)
+      @render()
+
+    #events:
+    #  "keyup .pandasgroup": 'pandasgroup'
+
+    render: () ->
+      @$el.html('')
+
   class PandasPivotTable extends HasParent
 
     type: 'PandasPivotTable'
@@ -282,7 +319,9 @@ define [
       @set('offset', maxoffset)
       @save()
 
-    default_view: PandasPivotView
+    default_view: PandasTableView
+    coffee_pivot_view: CoffeePivotView
+    pandas_pivot_view: PandasPivotView
 
     defaults: () ->
       return {
@@ -304,5 +343,5 @@ define [
   return {
     "Model" : PandasPivotTable,
     "Collection": new PandasPivotTables(),
-    "View": PandasPivotView
+    "View": PandasTableView
   }

@@ -69,6 +69,11 @@ class IPythonRemoteData(PlotObject):
         requests.post(self._url("selected"), data=protocol.serialize_json(data))
         self._trigger_events()
 
+    def pivot(self, transform):
+        data = requests.post(self._url("pivot"), data=protocol.serialize_json(transform)).json()
+        self._trigger_events()
+        return data
+
     def get_data(self, transform):
         data = requests.get(self._url(), data=protocol.serialize_json(transform)).json()
         self.metadata = data.pop('metadata', {})
@@ -121,6 +126,34 @@ class PandasPlotSource(ColumnDataSource):
         self.column_names = data['column_names']
         self.data = data['data']
 
+class PivotTable(PlotObject):
+    source = Instance(has_ref=True)
+    attrs = List() # List[String]
+    data = Dict() # Dict[String, Object]
+    rows = List() # List[String]
+    cols = List() # List[String]
+    vals = String()
+    renderer = String("table")
+    aggregator = String("count")
+
+    def setup_events(self):
+        self.on_change('attrs', self, 'get_data')
+        self.on_change('rows', self, 'get_data')
+        self.on_change('cols', self, 'get_data')
+        self.on_change('vals', self, 'get_data')
+        self.on_change('renderer', self, 'get_data')
+        self.on_change('aggregator', self, 'get_data')
+
+        if not self.data:
+            self.get_data()
+
+    def get_data(self, obj=None, attrname=None, old=None, new=None):
+        self.data = self.source.pivot(dict(
+            rows=self.rows,
+            cols=self.cols,
+            vals=self.vals,
+            aggregator=self.aggregator,
+        ))
 
 class PandasPivotTable(PlotObject):
     source = Instance(has_ref=True)
@@ -134,6 +167,7 @@ class PandasPivotTable(PlotObject):
     precision = Dict()
     tabledata = Dict()
     filterselected = Bool(default=False)
+
     def setup_events(self):
         self.on_change('columns', self, 'get_data')
         self.on_change('sort', self, 'get_data')
@@ -188,7 +222,7 @@ class PandasPivotTable(PlotObject):
 
     def get_data(self, obj=None, attrname=None, old=None, new=None):
         data = self.source.get_data(self.transform())
-        print data['data']['_selected']
+        #print data['data']['_selected']
         self.maxlength = data.pop('maxlength')
         self.totallength = data.pop('totallength')
         self.format_data(data['data'])
