@@ -4,6 +4,9 @@ import protocol
 import numpy as np
 import requests
 
+import logging
+logger = logging.getLogger(__name__)
+
 from bokeh.properties import (HasProps, MetaHasProps,
         Any, Dict, Enum, Float, Instance, Int, List, String,
         Color, Pattern, Percent, Size, Bool)
@@ -148,6 +151,7 @@ class PivotTable(PlotObject):
             self.get_data()
 
     def get_data(self, obj=None, attrname=None, old=None, new=None):
+        logger.info("PivotTable.get_data()")
         self.data = self.source.pivot(dict(
             rows=self.rows,
             cols=self.cols,
