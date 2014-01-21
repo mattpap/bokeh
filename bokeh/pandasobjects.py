@@ -131,13 +131,14 @@ class PandasPlotSource(ColumnDataSource):
 
 class PivotTable(PlotObject):
     source = Instance(has_ref=True)
-    attrs = List() # List[String]
-    data = Dict() # Dict[String, Object]
-    rows = List() # List[String]
-    cols = List() # List[String]
+    attrs = List()                       # List[String]
+    data = Dict()                        # Dict[String, Object]
+    rows = List()                        # List[String]
+    cols = List()                        # List[String]
     vals = String()
-    renderer = String("table")
-    aggregator = String("count")
+    renderer = Enum("table", "table-barchart", "heatmap", "row-heatmap", "col-heatmap")
+    aggregator = Enum("count", "sum", "average")
+    description = String()
 
     def setup_events(self):
         self.on_change('attrs', self, 'get_data')
