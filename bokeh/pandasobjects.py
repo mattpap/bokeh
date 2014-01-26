@@ -77,6 +77,11 @@ class IPythonRemoteData(PlotObject):
         self._trigger_events()
         return data
 
+    def fields(self):
+        data = requests.get(self._url("fields"), data=protocol.serialize_json({})).json()
+        self._trigger_events()
+        return data
+
     def get_data(self, transform):
         data = requests.get(self._url(), data=protocol.serialize_json(transform)).json()
         self.metadata = data.pop('metadata', {})
