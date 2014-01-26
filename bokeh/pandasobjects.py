@@ -140,7 +140,7 @@ class PivotTable(PlotObject):
     data = Dict()                        # Dict[String, Object]
     rows = List()                        # List[String]
     cols = List()                        # List[String]
-    vals = String()
+    vals = List()
     renderer = Enum("table", "table-barchart", "heatmap", "row-heatmap", "col-heatmap")
     aggregator = Enum("count", "sum", "average")
     description = String()
