@@ -134,37 +134,6 @@ class PandasPlotSource(ColumnDataSource):
         self.column_names = data['column_names']
         self.data = data['data']
 
-class PivotTable(PlotObject):
-    source = Instance(has_ref=True)
-    attrs = List()                       # List[String]
-    data = Dict()                        # Dict[String, Object]
-    rows = List()                        # List[String]
-    cols = List()                        # List[String]
-    vals = List()
-    renderer = Enum("table", "table-barchart", "heatmap", "row-heatmap", "col-heatmap")
-    aggregator = Enum("count", "sum", "average")
-    description = String()
-
-    def setup_events(self):
-        self.on_change('attrs', self, 'get_data')
-        self.on_change('rows', self, 'get_data')
-        self.on_change('cols', self, 'get_data')
-        self.on_change('vals', self, 'get_data')
-        self.on_change('renderer', self, 'get_data')
-        self.on_change('aggregator', self, 'get_data')
-
-        if not self.data:
-            self.get_data()
-
-    def get_data(self, obj=None, attrname=None, old=None, new=None):
-        logger.info("PivotTable.get_data()")
-        self.data = self.source.pivot(dict(
-            rows=self.rows,
-            cols=self.cols,
-            vals=self.vals,
-            aggregator=self.aggregator,
-        ))
-
 class PandasPivotTable(PlotObject):
     source = Instance(has_ref=True)
     columns = List()
