@@ -126,7 +126,7 @@ module.exports = (grunt) ->
         name: 'vendor/almond/almond'
         paths:
           jquery: "vendor/jquery/jquery"
-          jquery_mousewheel: "vendor/jquery-mousewheel/jquery.mousewheel"
+          mousewheel: "vendor/jquery-mousewheel/jquery.mousewheel"
           underscore: "vendor/underscore-amd/underscore"
           backbone: "vendor/backbone-amd/backbone"
           bootstrap: "vendor/bootstrap/bootstrap-2.0.4"
@@ -136,6 +136,9 @@ module.exports = (grunt) ->
         shim:
           sprintf:
             exports: 'sprintf'
+          mousewheel:
+            deps: ['jquery']
+            exports: '$.fn.mousewheel'
         include: ['underscore', 'main']
         fileExclusionRegExp: /^test/
         wrap: {

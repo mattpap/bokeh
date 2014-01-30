@@ -1,5 +1,5 @@
 
-define ["jquery"], ($) ->
+define ["jquery", "mousewheel"], ($, $1) ->
 
   set_bokehXY = (event) ->
     offset = $(event.currentTarget).offset()
@@ -152,15 +152,14 @@ define ["jquery"], ($) ->
       toolName = @toolName
       @plotview = plotview
       @eventSink = eventSink
-      @plotview.canvas_wrapper.bind("mousewheel",
-        (e, delta, dX, dY) =>
-          if not @tool_active
-            return
-          set_bokehXY(e)
-          e.delta = delta
-          eventSink.trigger("#{toolName}:zoom", e)
-          e.preventDefault()
-          e.stopPropagation())
+      @plotview.canvas_wrapper.mousewheel (e, delta, dX, dY) =>
+        if not @tool_active
+          return
+        set_bokehXY(e)
+        e.delta = delta
+        eventSink.trigger("#{toolName}:zoom", e)
+        e.preventDefault()
+        e.stopPropagation()
 
       $(document).bind('keydown', (e) =>
         #disable the tool when ESC is pressed
