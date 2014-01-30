@@ -1,9 +1,8 @@
-
-
 define [
+  "jquery",
   "common/plot_widget",
-  "common/has_parent"
-], (PlotWidget, HasParent) ->
+  "common/has_parent",
+], ($, PlotWidget, HasParent) ->
 
   class DataSliderView extends PlotWidget
     attributes:

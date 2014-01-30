@@ -1,7 +1,8 @@
 
 define [
+  "jquery",
   "./continuum_view",
-], (ContinuumView) ->
+], ($, ContinuumView) ->
 
   class PNGView extends ContinuumView.View
 

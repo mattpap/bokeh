@@ -1,11 +1,12 @@
 
 define [
   "underscore",
+  "jquery",
   "backbone",
   "common/has_parent",
   "common/continuum_view",
   "./pandas_pivot_template"
-], (_, Backbone, HasParent, ContinuumView, pandaspivot) ->
+], (_, $, Backbone, HasParent, ContinuumView, pandaspivot) ->
 
   ENTER = 13
 

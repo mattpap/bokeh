@@ -1,8 +1,10 @@
-define ["common/base",
+define [
+  "jquery",
+  "common/base",
   "./serverutils",
   "./usercontext/usercontext",
   "common/has_properties"
-],  (base, serverutils, usercontext, HasProperties) ->
+], ($, base, serverutils, usercontext, HasProperties) ->
   Config = base.Config
   Promises = serverutils.Promises
   Config.ws_conn_string = "ws://#{window.location.host}/bokeh/sub"

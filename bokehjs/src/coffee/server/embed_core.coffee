@@ -1,8 +1,9 @@
 define [
+  "jquery",
   "common/base",
   "common/load_models",
   "server/serverutils"
-],  (base, load_models, serverutils) ->
+], ($, base, load_models, serverutils) ->
 
   utility = serverutils.utility
 

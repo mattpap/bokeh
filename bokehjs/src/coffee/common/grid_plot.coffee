@@ -1,6 +1,7 @@
 
 define [
   "underscore",
+  "jquery",
   "backbone",
   "./build_views",
   "./safebind",
@@ -11,7 +12,7 @@ define [
   "mapper/2d/grid_mapper",
   "renderer/properties",
   "tool/active_tool_manager",
-], (_, Backbone, build_views, safebind, ContinuumView, HasParent, GridViewState, LinearMapper, GridMapper, Properties, ActiveToolManager) ->
+], (_, $, Backbone, build_views, safebind, ContinuumView, HasParent, GridViewState, LinearMapper, GridMapper, Properties, ActiveToolManager) ->
 
   class GridPlotView extends ContinuumView.View
     tagName: 'div'

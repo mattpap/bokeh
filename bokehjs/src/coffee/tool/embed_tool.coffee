@@ -1,10 +1,11 @@
 
 define [
   "underscore",
+  "jquery",
   "backbone",
   "./tool",
   "./event_generators",
-], (_, Backbone, Tool, EventGenerators) ->
+], (_, $, Backbone, Tool, EventGenerators) ->
 
   ButtonEventGenerator = EventGenerators.ButtonEventGenerator
 
@@ -56,7 +57,7 @@ define [
       $('#embedModal > .modal').on('hidden', () =>
         @plot_view.eventSink.trigger("clear_active_tool"))
       $('#embedModal > .modal').modal({show:true});
-    
+
     _close_modal : () ->
       $('#embedModal').remove()
       $('#embedModal > .modal').remove()

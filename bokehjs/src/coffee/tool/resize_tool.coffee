@@ -1,10 +1,11 @@
 
 define [
   "underscore",
+  "jquery",
   "backbone",
   "./tool",
   "./event_generators",
-], (_, Backbone, Tool, EventGenerators) ->
+], (_, $, Backbone, Tool, EventGenerators) ->
 
   TwoPointEventGenerator = EventGenerators.TwoPointEventGenerator
 

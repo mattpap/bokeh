@@ -1,5 +1,5 @@
 
-define [], () ->
+define ["jquery"], ($) ->
 
   set_bokehXY = (event) ->
     offset = $(event.currentTarget).offset()

@@ -1,12 +1,13 @@
 
 define [
   "underscore",
+  "jquery",
   "backbone",
   "./build_views",
   "./safebind",
   "./has_parent"
   "./continuum_view",
-], (_, Backbone, build_views, safebind, HasParent, ContinuumView) ->
+], (_, $, Backbone, build_views, safebind, HasParent, ContinuumView) ->
 
   class PlotContextView extends ContinuumView.View
     initialize: (options) ->
@@ -85,7 +86,7 @@ define [
       return {
         children: []
         render_loop: true
-      } 
+      }
 
   class PlotContexts extends Backbone.Collection
     model: PlotContext
