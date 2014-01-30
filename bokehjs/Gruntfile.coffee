@@ -243,10 +243,15 @@ module.exports = (grunt) ->
   grunt.loadNpmTasks('grunt-groc')
 
   grunt.registerTask("default",     ["build", "qunit"])
-  grunt.registerTask("build",       ["coffee", "less", "copy", "eco", "config"])
+  grunt.registerTask("build",       ["coffee", "less", "copy-no-release", "eco", "config"])
   grunt.registerTask("deploy",      ["build",  "requirejs:production", "concat:css", "cssmin"])
   grunt.registerTask("devdeploy" ,  ["build",  "requirejs:development", "concat:css", "symlink"])
   grunt.registerTask("deploy-both", ["deploy", "devdeploy"])
+  grunt.registerTask("copy-no-release", "Run copy tasks but skip copy:release", () ->
+    copy = grunt.config.get("copy")
+    tasks = ("copy:#{task}" for own task, _ of copy when task != "release")
+    grunt.task.run(tasks)
+  )
   grunt.registerTask("config", "Write config.js", () ->
     config = {
       paths: grunt.config.get("requirejs.options.paths")
