@@ -5,12 +5,11 @@
   <title>QUnit Test Suite</title>
   <link rel="stylesheet" href="/static/vendor/qunit/css/qunit.css" type="text/css" media="screen">
   <script type="text/javascript" src="/static/vendor/qunit/js/qunit.js"></script>
-  <link type="text/css" rel="stylesheet" href="/static/vendor/jquery/css/themes/base/jquery-ui.min.css"/>
 
   <link type="text/css" rel="stylesheet" href="/static/css/bokeh.css"/>
-  <link type="text/css" rel="stylesheet" href="/static/vendor/bootstrap/css/bootstrap.css"/>  
+  <link type="text/css" rel="stylesheet" href="/static/vendor/bootstrap/css/bootstrap.css"/>
   <!-- Your project file goes here -->
-  
+
   {% for jsfile in jslibs %}
   <script type="text/javascript" src="{{jsfile}}"></script>
   {% endfor %}
@@ -22,7 +21,7 @@
     require("{{ testscript }}");
     {% endfor %}
   </script>
-  
+
 </head>
 <body>
   <a href="/">Return to welcome page </a>
