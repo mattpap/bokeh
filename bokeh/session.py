@@ -175,7 +175,7 @@ class BaseJSONSession(Session):
 
     def serialize_models(self, objects=None, **jsonkwargs):
         return self.serialize(self.convert_models(objects), **jsonkwargs)
-    
+
 class BaseHTMLSession(BaseJSONSession):
     """ Common file & HTML-related utility functions which all HTML output
     sessions will need.  Mostly involves JSON serialization.
@@ -253,12 +253,10 @@ class HTMLFileSession(BaseHTMLSession):
     js_template = "plots.js"
     div_template = "plots.html"     # template for just the plot <div>
     html_template = "base.html"     # template for the entire HTML file
-    inline_js = True
-    inline_css = True
 
     # Used to compute the relative paths to JS and CSS if they are not
     # inlined into the output
-    rootdir = abspath(split(__file__)[0])
+    default_rootdir = abspath(split(__file__)[0])
 
     def __init__(self, filename="bokehplot.html", plot=None, title=None):
         self.filename = filename
@@ -290,13 +288,13 @@ class HTMLFileSession(BaseHTMLSession):
     def dumps(self, js=None, css=None, rootdir=None):
         """ Returns the HTML contents as a string
 
-        **js** and **css** can be "inline" or "relative", and they default
-        to the values of self.inline_js and self.inline_css.
+        **js** and **css** can be "inline", "relative" or "absolute", with
+        the default being "inline".
 
-        If these are set to be "relative" (or self.inline_js/css are False),
-        **rootdir** can be specified to indicate the base directory from which
-        the path to the various static files should be computed.  **rootdir**
-        defaults to the value of self.rootdir.
+        If these are set to be "relative" **rootdir** can be specified to
+        indicate the base directory from which the path to the various
+        static files should be computed.  **rootdir** defaults to the value
+        of `self.default_rootdir`.
         """
         # FIXME: Handle this more intelligently
         pc_ref = self.get_ref(self.plotcontext)
@@ -312,9 +310,9 @@ class HTMLFileSession(BaseHTMLSession):
         jsfiles, cssfiles = [], []
 
         if rootdir is None:
-            rootdir = self.rootdir
+            rootdir = self.default_rootdir
 
-        if js == "inline" or (js is None and self.inline_js):
+        if js == "inline" or js is None:
             rawjs = self._inline_files(self.js_paths())
         elif js == "relative" or js is None:
             jsfiles = [ os.path.relpath(p, rootdir) for p in self.js_paths() ]
@@ -323,7 +321,7 @@ class HTMLFileSession(BaseHTMLSession):
         else:
             raise ValueError("wrong value for 'js' parameter, expected None, 'inline', 'relative' or 'absolute', got %r" % js)
 
-        if css == "inline" or (css is None and self.inline_css):
+        if css == "inline" or css is None:
             rawcss = self._inline_files(self.css_paths())
         elif css == "relative" or css is None:
             cssfiles = [ os.path.relpath(p, rootdir) for p in self.css_paths() ]
@@ -363,13 +361,13 @@ class HTMLFileSession(BaseHTMLSession):
         """ Saves the file contents.  Uses self.filename if **filename**
         is not provided.  Overwrites the contents.
 
-        **js** and **css** can be "inline" or "relative", and they default
-        to the values of self.inline_js and self.inline_css.
+        **js** and **css** can be "inline", "relative" or "absolute", with
+        the default being "inline".
 
-        If these are set to be "relative" (or self.inline_js/css are False),
-        **rootdir** can be specified to indicate the base directory from which
-        the path to the various static files should be computed.  **rootdir**
-        defaults to the value of self.rootdir.
+        If these are set to be "relative" **rootdir** can be specified to
+        indicate the base directory from which the path to the various
+        static files should be computed.  **rootdir** defaults to the value
+        of `self.default_rootdir`.
         """
         s = self.dumps(js, css, rootdir)
         if filename is None:

@@ -245,8 +245,7 @@ def output_server(docname, server=None, name=None, url="default", **kwargs):
     real_url = _config["output_url"]
     print("Using plot server at", real_url + "bokeh;", "Docname:", docname)
 
-def output_file(filename, title="Bokeh Plot", autosave=True, js="inline",
-                css="inline", rootdir="."):
+def output_file(filename, title="Bokeh Plot", autosave=True, js=None, css=None, rootdir="."):
     """ Outputs to a static HTML file. WARNING: This file will be overwritten
     each time show() is invoked.
 
@@ -266,15 +265,15 @@ def output_file(filename, title="Bokeh Plot", autosave=True, js="inline",
         print("Session output file '%s' already exists, will be overwritten." %
                 filename)
     session = HTMLFileSession(filename, title=title)
-    if js == "relative":
-        session.inline_js = False
-    if css == "relative":
-        session.inline_css = False
-    if rootdir:
-        session.rootdir = rootdir
     _config.update(dict(
-        output_type = "file", output_file = filename, output_url= None,
-        session = session))
+        output_type = "file",
+        output_file = filename,
+        output_url = None,
+        session = session,
+        js = js,
+        css = css,
+        rootdir = rootdir,
+    ))
 
 def figure():
     _config["curplot"] = None
@@ -316,7 +315,7 @@ def show(browser=None, new="tab"):
     new_param = {'tab': 2, 'window': 1}[new]
     controller = browserlib.get_browser_controller(browser=browser)
     if output_type == "file":
-        session.save()
+        session.save(js=_config["js"], css=_config["css"], rootdir=_config["rootdir"])
         controller.open("file://" + os.path.abspath(_config["output_file"]), new=new_param)
     elif output_type == "server":
         session.store_all()
@@ -337,7 +336,7 @@ def save(filename=None):
             oldfilename = session.filename
             session.filename = filename
         try:
-            session.save()
+            session.save(js=_config["js"], css=_config["css"], rootdir=_config["rootdir"])
         finally:
             if filename is not None:
                 session.filename = oldfilename
