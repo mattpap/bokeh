@@ -12,7 +12,6 @@ notebookscript_paths = [
 css_paths = [
     'vendor/bokehjs/css/bokeh.css',
     'vendor/bokehjs/css/continuum.css',
-    'vendor/bokehjs/vendor/bootstrap/css/bootstrap.css',    
     ]
 
 def static_join(*dirs):

@@ -6,7 +6,6 @@ define [
   "common/bulk_save",
   "./tool",
   "./event_generators",
-  "bootstrap",
 ], (_, $, Backbone, bulk_save, Tool, EventGenerators) ->
 
   ButtonEventGenerator = EventGenerators.ButtonEventGenerator

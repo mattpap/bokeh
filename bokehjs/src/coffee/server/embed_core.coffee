@@ -58,8 +58,7 @@ define [
 
   injectCss = (static_root_url) ->
     css_urls = ["#{static_root_url}css/bokeh.css",
-                "#{static_root_url}css/continuum.css",
-                "#{static_root_url}js/vendor/bootstrap/bootstrap-bokeh-2.0.4.css"]
+                "#{static_root_url}css/continuum.css"]
 
 
     load_css = (url) ->

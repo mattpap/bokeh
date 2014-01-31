@@ -129,7 +129,6 @@ module.exports = (grunt) ->
           mousewheel: "vendor/jquery-mousewheel/jquery.mousewheel"
           underscore: "vendor/underscore-amd/underscore"
           backbone: "vendor/backbone-amd/backbone"
-          bootstrap: "vendor/bootstrap/bootstrap-2.0.4"
           timezone: "vendor/timezone/src/timezone"
           sprintf: "vendor/sprintf/src/sprintf"
           rbush: "vendor/rbush/rbush"
@@ -159,7 +158,6 @@ module.exports = (grunt) ->
         separator: ""
       css:
         src: [
-          "build/js/vendor/bootstrap/bootstrap-bokeh-2.0.4.css",
           "build/css/continuum.css"
           "build/css/main.css"
         ]
