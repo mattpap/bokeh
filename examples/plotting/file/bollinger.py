@@ -10,7 +10,7 @@ import numpy as np
 
 # Declare output file
 
-output_file('bollinger.html', title='Bollinger bands (file)', js='absolute', css='absolute')
+output_file('bollinger.html', title='Bollinger bands (file)')
 
 # Define Bollinger Bands.
 

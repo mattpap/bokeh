@@ -11,7 +11,7 @@ N = 100
 x = np.linspace(0, 4*np.pi, N)
 y = np.sin(x)
 
-output_file("relative_paths.html", title="Relative path example", js="relative", css="relative")
+output_file("relative_paths.html", title="Relative path example", scripts="relative")
 
 scatter(x,y, color="#FF00FF", tools="pan,wheel_zoom,resize,save")
 
@@ -23,5 +23,5 @@ show()
 # the relative paths will be computed:
 #
 #output_file("scatter.html", title="scatter.py example",
-#        js="relative", css="relative", rootdir="/some/other/path")
+#    scripts="relative", rootdir="/some/other/path")
 

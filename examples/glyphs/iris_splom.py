@@ -93,7 +93,7 @@ grid = GridPlot(children=plots, name="iris_splom")
 sess = session.HTMLFileSession("iris_splom.html")
 sess.add(grid, recursive=True)
 sess.plotcontext.children.append(grid)
-sess.save(js="absolute", css="absolute")
+sess.save()
 print("Wrote %s" % sess.filename)
 
 if __name__ == "__main__":

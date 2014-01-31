@@ -24,7 +24,7 @@ then you can use ``pip``:
 
     $ pip install bokeh
 
-This will not install any examples, and you will need to clone the git 
+This will not install any examples, and you will need to clone the git
 repository and look in the ``examples/`` directory there.
 
 To download from source, clone the `Bokeh git repo <https://github.com/ContinuumIO/bokeh>`_,
@@ -33,7 +33,7 @@ then run:
 
     $ python setup.py install
 
-If you are using Windows, please see the 
+If you are using Windows, please see the
 :ref:`install_windows`.
 
 
@@ -52,7 +52,7 @@ open a browser window to display it, and it should look like:
 
 Try running ``line.py`` or ``candlestick.py`` for other static HTML file examples.
 
-If these HTML files are too large (since they embed the source code for 
+If these HTML files are too large (since they embed the source code for
 the BokehJS Javascript library, as well as the various Bokeh CSS), then you
 can modify any of the example scripts in ``examples/plotting/file/`` and change
 the ``output_file()`` function calls by adding two keyword arguments.  For the
@@ -64,7 +64,7 @@ iris.py example, you would change the call:
 To:
 ::
 
-    output_file("iris.html", title="iris.py example", js="relative", css="relative")
+    output_file("iris.html", title="iris.py example", scripts="relative")
 
 
 Using the Plot Server
@@ -74,7 +74,7 @@ Rather than embedding all the data directly into the HTML file, you can also
 store data into a "plot server" and the client-side library will directly,
 dynamically load the data from there.
 
-If you installed Bokeh via running ``python setup.py`` or via a 
+If you installed Bokeh via running ``python setup.py`` or via a
 `conda <http://docs.continuum.io/conda/intro.html>`_ package, then you should
 have a command `bokeh-server` available to you.  You can run this command in
 any directory, but it will create temporary files in the directory in which
@@ -84,7 +84,7 @@ some such, and run the command there.
 
     $ ./bokeh-server
 
-If you have Bokeh installed for development mode (see :ref:`developer_install`), 
+If you have Bokeh installed for development mode (see :ref:`developer_install`),
 then you should go into the checked-out source directory and run:
 ::
 
