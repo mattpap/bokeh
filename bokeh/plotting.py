@@ -132,8 +132,7 @@ def set_config():
 
         # Configuration options for "file" output mode
         "autosave": False,
-        "file_js": "inline",
-        "file_css": "inline",
+        "file_scripts": "inline",
         "file_rootdir": None,
 
         # The currently active Session object
@@ -245,7 +244,7 @@ def output_server(docname, server=None, name=None, url="default", **kwargs):
     real_url = _config["output_url"]
     print("Using plot server at", real_url + "bokeh;", "Docname:", docname)
 
-def output_file(filename, title="Bokeh Plot", autosave=True, js=None, css=None, rootdir="."):
+def output_file(filename, title="Bokeh Plot", autosave=True, scripts="inline", rootdir="."):
     """ Outputs to a static HTML file. WARNING: This file will be overwritten
     each time show() is invoked.
 
@@ -253,7 +252,7 @@ def output_file(filename, title="Bokeh Plot", autosave=True, js=None, css=None, 
     visual functions is called, this causes the file to be saved.  If it
     is False, then the file is only saved upon calling show().
 
-    **js** and **css** can be "inline" or "relative". In the latter case,
+    **scripts** can be "inline", "relative" or "absolute". In the latter case,
     **rootdir** can be specified to indicate the base directory from which
     the path to the various static files should be computed.
 
@@ -266,13 +265,12 @@ def output_file(filename, title="Bokeh Plot", autosave=True, js=None, css=None, 
                 filename)
     session = HTMLFileSession(filename, title=title)
     _config.update(dict(
+        session = session,
         output_type = "file",
         output_file = filename,
         output_url = None,
-        session = session,
-        js = js,
-        css = css,
-        rootdir = rootdir,
+        file_scripts = scripts,
+        file_rootdir = rootdir,
     ))
 
 def figure():
@@ -315,7 +313,7 @@ def show(browser=None, new="tab"):
     new_param = {'tab': 2, 'window': 1}[new]
     controller = browserlib.get_browser_controller(browser=browser)
     if output_type == "file":
-        session.save(js=_config["js"], css=_config["css"], rootdir=_config["rootdir"])
+        session.save(scripts=_config["file_scripts"], rootdir=_config["file_rootdir"])
         controller.open("file://" + os.path.abspath(_config["output_file"]), new=new_param)
     elif output_type == "server":
         session.store_all()
@@ -336,7 +334,7 @@ def save(filename=None):
             oldfilename = session.filename
             session.filename = filename
         try:
-            session.save(js=_config["js"], css=_config["css"], rootdir=_config["rootdir"])
+            session.save(scripts=_config["file_scripts"], rootdir=_config["file_rootdir"])
         finally:
             if filename is not None:
                 session.filename = oldfilename
@@ -900,7 +898,7 @@ def _new_xy_plot(x_range=None, y_range=None, plot_width=None, plot_height=None,
 
     for tool in re.split(r"\s*,\s*", tools.strip()):
         # re.split will return empty strings; ignore them.
-        if tool == "": 
+        if tool == "":
             continue
         if tool == "pan":
             tool_obj = PanTool(dataranges=[p.x_range, p.y_range], dimensions=["width", "height"])

@@ -285,11 +285,10 @@ class HTMLFileSession(BaseHTMLSession):
     def raw_js_snippets(self, obj):
         self.raw_js_objs.append(obj)
 
-    def dumps(self, js=None, css=None, rootdir=None):
+    def dumps(self, scripts='inline', rootdir=None):
         """ Returns the HTML contents as a string
 
-        **js** and **css** can be "inline", "relative" or "absolute", with
-        the default being "inline".
+        **scripts** can be "inline", "relative" or "absolute".
 
         If these are set to be "relative" **rootdir** can be specified to
         indicate the base directory from which the path to the various
@@ -306,29 +305,23 @@ class HTMLFileSession(BaseHTMLSession):
                     modeltype = pc_ref["type"],
                     all_models = self.serialize_models())
 
-        rawjs, rawcss = None, None
-        jsfiles, cssfiles = [], []
-
         if rootdir is None:
             rootdir = self.default_rootdir
 
-        if js == "inline" or js is None:
-            rawjs = self._inline_files(self.js_paths())
-        elif js == "relative" or js is None:
-            jsfiles = [ os.path.relpath(p, rootdir) for p in self.js_paths() ]
-        elif js == "absolute":
-            jsfiles = self.js_paths()
-        else:
-            raise ValueError("wrong value for 'js' parameter, expected None, 'inline', 'relative' or 'absolute', got %r" % js)
+        rawjs, rawcss = None, None
+        jsfiles, cssfiles = [], []
 
-        if css == "inline" or css is None:
+        if scripts == "inline":
+            rawjs = self._inline_files(self.js_paths())
             rawcss = self._inline_files(self.css_paths())
-        elif css == "relative" or css is None:
+        elif scripts == "relative":
+            jsfiles = [ os.path.relpath(p, rootdir) for p in self.js_paths() ]
             cssfiles = [ os.path.relpath(p, rootdir) for p in self.css_paths() ]
-        elif css == "absolute":
+        elif scripts == "absolute":
+            jsfiles = self.js_paths()
             cssfiles = self.css_paths()
         else:
-            raise ValueError("wrong value for 'css' parameter, expected None, 'inline', 'relative' or 'absolute', got %r" % css)
+            raise ValueError("expected 'inline', 'relative' or 'absolute', got %r" % scripts)
 
         plot_div = self._load_template(self.div_template).render(elementid=elementid)
 
@@ -357,19 +350,18 @@ class HTMLFileSession(BaseHTMLSession):
 
         return jscode.encode("utf-8")
 
-    def save(self, filename=None, js=None, css=None, rootdir=None):
+    def save(self, filename=None, scripts="inline", rootdir=None):
         """ Saves the file contents.  Uses self.filename if **filename**
         is not provided.  Overwrites the contents.
 
-        **js** and **css** can be "inline", "relative" or "absolute", with
-        the default being "inline".
+        **scripts** can be "inline", "relative" or "absolute".
 
         If these are set to be "relative" **rootdir** can be specified to
         indicate the base directory from which the path to the various
         static files should be computed.  **rootdir** defaults to the value
         of `self.default_rootdir`.
         """
-        s = self.dumps(js, css, rootdir)
+        s = self.dumps(scripts=scripts, rootdir=rootdir)
         if filename is None:
             filename = self.filename
         with open(filename, "wb") as f:
