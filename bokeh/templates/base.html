@@ -19,14 +19,14 @@
             {{ rawjs|indent(12) }}
         </script>
         {%- endif %}
+        <script type="text/javascript">
+            $(function() {
+                {%- for snippet in js_snippets %}
+                {{ snippet|indent(16) }}
+                {%- endfor %}
+            });
+        </script>
     </head>
-    <script type="text/javascript">
-        $(function() {
-            {%- for snippet in js_snippets %}
-            {{ snippet|indent(12) }}
-            {%- endfor %}
-        });
-    </script>
     <body>
         {%- for snippet in html_snippets %}
         {{ snippet|indent(8) }}
