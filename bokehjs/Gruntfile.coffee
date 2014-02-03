@@ -60,6 +60,7 @@ module.exports = (grunt) ->
             src : ['*.css']
             dest : 'release/css'
         ]
+
     clean: ['build']
 
     less:
@@ -109,16 +110,6 @@ module.exports = (grunt) ->
           'build/demo/spectrogram/static/spectrogram.js': 'demo/spectrogram/coffee/spectrogram.coffee'
         }
 
-    symlink:
-      # The "build/target.txt" symlink will be created and linked to
-      # "source/target.txt". It should appear like this in a file listing:
-      # build/target.txt -> ../source/target.txt
-      spectrogram: {
-        src: 'build/js/bokeh.js',
-        dest: 'build/demo/spectrogram/static/bokeh.js'
-      }
-
-
     requirejs:
       options:
         logLevel: 2
@@ -129,7 +120,7 @@ module.exports = (grunt) ->
           mousewheel: "vendor/jquery-mousewheel/jquery.mousewheel"
           underscore: "vendor/underscore-amd/underscore"
           backbone: "vendor/backbone-amd/backbone"
-          bootstrap: "vendor/bootstrap/bootstrap-2.0.4"
+          modal: "vendor/bootstrap/modal"
           timezone: "vendor/timezone/src/timezone"
           sprintf: "vendor/sprintf/src/sprintf"
           rbush: "vendor/rbush/rbush"
@@ -205,6 +196,12 @@ module.exports = (grunt) ->
         options:
           spawn: false
 
+    connect:
+      server:
+        options:
+          port: 8000,
+          base: '.'
+
     qunit:
       all:
         options:
@@ -238,16 +235,18 @@ module.exports = (grunt) ->
   grunt.loadNpmTasks("grunt-contrib-copy")
   grunt.loadNpmTasks("grunt-contrib-clean")
   grunt.loadNpmTasks("grunt-contrib-qunit")
-  grunt.loadNpmTasks('grunt-contrib-symlink')
+  grunt.loadNpmTasks('grunt-contrib-connect');
   grunt.loadNpmTasks("grunt-eco")
   grunt.loadNpmTasks('grunt-groc')
 
   grunt.registerTask("default",     ["build", "qunit"])
-  grunt.registerTask("build",       ["coffee", "less", "copy-no-release", "eco", "config"])
-  grunt.registerTask("deploy",      ["build",  "requirejs:production", "concat:css", "cssmin"])
-  grunt.registerTask("devdeploy" ,  ["build",  "requirejs:development", "concat:css", "symlink"])
-  grunt.registerTask("deploy-both", ["deploy", "devdeploy"])
-  grunt.registerTask("copy-no-release", "Run copy tasks but skip copy:release", () ->
+  grunt.registerTask("build",       ["coffee", "less", "build-copy", "eco", "config"])
+  grunt.registerTask("mindeploy",   ["build",  "requirejs:production", "concat:css", "cssmin"])
+  grunt.registerTask("devdeploy" ,  ["build",  "requirejs:development", "concat:css"])
+  grunt.registerTask("deploy",      ["mindeploy", "devdeploy"])
+  grunt.registerTask("test",        ["connect", "qunit"])
+  grunt.registerTask("serve",       ["connect:server:keepalive"])
+  grunt.registerTask("build-copy", "Run copy tasks but skip copy:release", () ->
     copy = grunt.config.get("copy")
     tasks = ("copy:#{task}" for own task, _ of copy when task != "release")
     grunt.task.run(tasks)
@@ -260,4 +259,4 @@ module.exports = (grunt) ->
     content = "require.config(#{JSON.stringify(config)});"
     grunt.file.write('build/js/config.js', content)
   )
-  grunt.registerTask("release", ["deploy-both", "copy:release"])
+  grunt.registerTask("release", ["deploy", "copy:release"])
