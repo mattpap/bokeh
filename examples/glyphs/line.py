@@ -46,8 +46,11 @@ plot.tools = [pantool, wheelzoomtool]
 sess = session.HTMLFileSession("line.html")
 sess.add(plot, recursive=True)
 sess.plotcontext.children.append(plot)
-sess.save(js="absolute", css="absolute")
-print("Wrote %s" % sess.filename)
+
+if __name__ == "__main__":
+    sess.save(js="absolute", css="absolute")
+    print("Wrote %s" % sess.filename)
+    sess.view()
 
 if __name__ == "__main__":
     sess.view()

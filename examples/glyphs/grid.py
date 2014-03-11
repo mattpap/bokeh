@@ -54,8 +54,8 @@ grid = GridPlot(children=[[plot1, plot2], [plot3, plot4]])
 sess = session.HTMLFileSession("grid.html")
 sess.add(grid, recursive=True)
 sess.plotcontext.children.append(grid)
-sess.save(js="absolute", css="absolute")
-print("Wrote %s" % sess.filename)
 
 if __name__ == "__main__":
+    sess.save(js="absolute", css="absolute")
+    print("Wrote %s" % sess.filename)
     sess.view()

@@ -47,9 +47,9 @@ plot.tools = [pantool, wheelzoomtool]
 sess = session.HTMLFileSession("dateaxis.html")
 sess.add(plot, recursive=True)
 sess.plotcontext.children.append(plot)
-sess.save(js="absolute", css="absolute")
-sess.dumpjson(file="dateaxis.json")
-print("Wrote %s" % sess.filename)
 
 if __name__ == "__main__":
+    sess.save(js="absolute", css="absolute")
+    print("Wrote %s" % sess.filename)
+    sess.dumpjson(file="dateaxis.json")
     sess.view()
