@@ -1,8 +1,7 @@
-from __future__ import print_function
-
 """ A set of descriptors that document intended types for attributes on
 classes and implement convenience behaviors like default values, etc.
 """
+from __future__ import print_function
 
 from six import string_types, add_metaclass
 
@@ -783,13 +782,14 @@ class DashPattern(BaseProperty):
     """
     This is a property that expresses line dashes.  It can be specified in
     a variety of forms:
-       * "solid", "dashed", "dotted", "dotdash", "dashdot"
-       * A tuple or list of integers in the HTML5 Canvas dash specification
-         style: http://www.w3.org/html/wg/drafts/2dcontext/html5_canvas/#dash-list
-         Note that if the list of integers has an odd number of elements, then
-         it is duplicated, and that duplicated list becomes the new dash list.
-       * A string of integers with spaces separating them. This is broken up into
-         a list and then treated like the above.
+    
+    * "solid", "dashed", "dotted", "dotdash", "dashdot"
+    * A tuple or list of integers in the HTML5 Canvas dash specification
+      style: http://www.w3.org/html/wg/drafts/2dcontext/html5_canvas/#dash-list
+      Note that if the list of integers has an odd number of elements, then
+      it is duplicated, and that duplicated list becomes the new dash list.
+    * A string of integers with spaces separating them. This is broken up into
+      a list and then treated like the above.
 
     If dash is turned off, then the dash pattern is the empty list [].
     """

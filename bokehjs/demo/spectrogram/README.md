@@ -6,13 +6,19 @@ Build & Prereqs
 
 You will still need to follow the installation instructions in the top-level README.md in the bokehjs directory, i.e. you need to have node, npm, coffeescript, and grunt installed.
 
-You will also need PyAudio and Flask installed.  (These come with Anaconda.)
+You will also need PyAudio and Flask installed (these come with Anaconda).
+
+Note: In some debian-based systems, to install PyAudio, you will need some underlying dependencies, such as libjack-jackd2-dev and portaudio19-dev.
 
 Build the coffeescript:
 
-`$ grunt `deploy-both`
+`$ grunt devdeploy`
 
-This should create spectrogram.js under the build directory and copy all the supporting files there as well.
+or
+
+`$ grunt deploy`
+
+This should create spectrogram.js under the build/demo/spectrogram directory and copy all the supporting files there as well.
 
 Running the Demo
 ================

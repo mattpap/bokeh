@@ -12522,9 +12522,12 @@ if ( typeof window === "object" && typeof window.document === "object" ) {
             toremove.push(key);
           }
         }
-        for (_i = 0, _len = toremove.length; _i < _len; _i++) {
-          key = toremove[_i];
-          delete attrs[key];
+        if (!_.isEmpty(toremove)) {
+          attrs = _.clone(attrs);
+          for (_i = 0, _len = toremove.length; _i < _len; _i++) {
+            key = toremove[_i];
+            delete attrs[key];
+          }
         }
         if (!_.isEmpty(attrs)) {
           return HasProperties.__super__.set.call(this, attrs, options);
@@ -13510,14 +13513,19 @@ if ( typeof window === "object" && typeof window.document === "object" ) {
         if (this[attrname].value != null) {
           return this[attrname].value;
         }
+        if (obj.get && obj.get(attrname)) {
+          return obj.get(attrname);
+        }
+        if (obj.mget && obj.mget(attrname)) {
+          return obj.mget(attrname);
+        }
         if (obj[attrname] != null) {
           return obj[attrname];
         }
         if (this[attrname]["default"] != null) {
           return this[attrname]["default"];
-        } else {
-          return console.log("selection for attribute '" + attrname + "' failed on object: " + obj);
         }
+        return console.log("selection for attribute '" + attrname + "' failed on object: " + obj);
       };
 
       properties.prototype.v_select = function(attrname, objs) {
@@ -13874,543 +13882,6 @@ if ( typeof window === "object" && typeof window.document === "object" ) {
     __hasProp = {}.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
-  define('common/plot',["underscore", "backbone", "require", "./build_views", "./safebind", "./bulk_save", "./continuum_view", "./has_parent", "./view_state", "mapper/1d/linear_mapper", "mapper/2d/grid_mapper", "renderer/properties", "tool/active_tool_manager"], function(_, Backbone, require, build_views, safebind, bulk_save, ContinuumView, HasParent, ViewState, LinearMapper, GridMapper, Properties, ActiveToolManager) {
-    var LEVELS, Plot, PlotView, Plots, delay_animation, line_properties, text_properties, throttle_animation, _ref, _ref1, _ref2;
-    line_properties = Properties.line_properties;
-    text_properties = Properties.text_properties;
-    LEVELS = ['image', 'underlay', 'glyph', 'overlay', 'annotation', 'tool'];
-    delay_animation = function(f) {
-      return f();
-    };
-    delay_animation = window.requestAnimationFrame || window.mozRequestAnimationFrame || window.webkitRequestAnimationFrame || window.msRequestAnimationFrame || delay_animation;
-    throttle_animation = function(func, wait) {
-      var args, context, later, pending, previous, result, timeout, _ref;
-      _ref = [null, null, null, null], context = _ref[0], args = _ref[1], timeout = _ref[2], result = _ref[3];
-      previous = 0;
-      pending = false;
-      later = function() {
-        previous = new Date;
-        timeout = null;
-        pending = false;
-        return result = func.apply(context, args);
-      };
-      return function() {
-        var now, remaining;
-        now = new Date;
-        remaining = wait - (now - previous);
-        context = this;
-        args = arguments;
-        if (remaining <= 0 && !pending) {
-          clearTimeout(timeout);
-          pending = true;
-          delay_animation(later);
-        } else if (!timeout) {
-          timeout = setTimeout((function() {
-            return delay_animation(later);
-          }), remaining);
-        }
-        return result;
-      };
-    };
-    PlotView = (function(_super) {
-      __extends(PlotView, _super);
-
-      function PlotView() {
-        this._mousemove = __bind(this._mousemove, this);
-        this._mousedown = __bind(this._mousedown, this);
-        _ref = PlotView.__super__.constructor.apply(this, arguments);
-        return _ref;
-      }
-
-      PlotView.prototype.className = "bokeh plotview";
-
-      PlotView.prototype.events = {
-        "mousemove .bokeh_canvas_wrapper": "_mousemove",
-        "mousedown .bokeh_canvas_wrapper": "_mousedown"
-      };
-
-      PlotView.prototype.view_options = function() {
-        return _.extend({
-          plot_model: this.model,
-          plot_view: this
-        }, this.options);
-      };
-
-      PlotView.prototype._mousedown = function(e) {
-        var f, _i, _len, _ref1, _results;
-        _ref1 = this.mousedownCallbacks;
-        _results = [];
-        for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
-          f = _ref1[_i];
-          _results.push(f(e, e.layerX, e.layerY));
-        }
-        return _results;
-      };
-
-      PlotView.prototype._mousemove = function(e) {
-        var f, _i, _len, _ref1, _results;
-        _ref1 = this.moveCallbacks;
-        _results = [];
-        for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
-          f = _ref1[_i];
-          _results.push(f(e, e.layerX, e.layerY));
-        }
-        return _results;
-      };
-
-      PlotView.prototype.pause = function() {
-        return this.is_paused = true;
-      };
-
-      PlotView.prototype.unpause = function(render_canvas) {
-        if (render_canvas == null) {
-          render_canvas = false;
-        }
-        this.is_paused = false;
-        if (render_canvas) {
-          return this.request_render_canvas(true);
-        } else {
-          return this.request_render();
-        }
-      };
-
-      PlotView.prototype.request_render = function() {
-        if (!this.is_paused) {
-          this.throttled_render();
-        }
-      };
-
-      PlotView.prototype.request_render_canvas = function(full_render) {
-        if (!this.is_paused) {
-          this.throttled_render_canvas(full_render);
-        }
-      };
-
-      PlotView.prototype.initialize = function(options) {
-        var level, _i, _len, _ref1, _ref10, _ref11, _ref12, _ref13, _ref14, _ref15, _ref16, _ref17, _ref2, _ref3, _ref4, _ref5, _ref6, _ref7, _ref8, _ref9;
-        PlotView.__super__.initialize.call(this, _.defaults(options, this.default_options));
-        this.throttled_render = throttle_animation(this.render, 15);
-        this.throttled_render_canvas = throttle_animation(this.render_canvas, 15);
-        this.outline_props = new line_properties(this, {}, 'outline_');
-        this.title_props = new text_properties(this, {}, 'title_');
-        this.view_state = new ViewState({
-          canvas_width: (_ref1 = options.canvas_width) != null ? _ref1 : this.mget('canvas_width'),
-          canvas_height: (_ref2 = options.canvas_height) != null ? _ref2 : this.mget('canvas_height'),
-          x_offset: (_ref3 = options.x_offset) != null ? _ref3 : this.mget('x_offset'),
-          y_offset: (_ref4 = options.y_offset) != null ? _ref4 : this.mget('y_offset'),
-          outer_width: (_ref5 = options.outer_width) != null ? _ref5 : this.mget('outer_width'),
-          outer_height: (_ref6 = options.outer_height) != null ? _ref6 : this.mget('outer_height'),
-          min_border_top: (_ref7 = (_ref8 = options.min_border_top) != null ? _ref8 : this.mget('min_border_top')) != null ? _ref7 : this.mget('min_border'),
-          min_border_bottom: (_ref9 = (_ref10 = options.min_border_bottom) != null ? _ref10 : this.mget('min_border_bottom')) != null ? _ref9 : this.mget('min_border'),
-          min_border_left: (_ref11 = (_ref12 = options.min_border_left) != null ? _ref12 : this.mget('min_border_left')) != null ? _ref11 : this.mget('min_border'),
-          min_border_right: (_ref13 = (_ref14 = options.min_border_right) != null ? _ref14 : this.mget('min_border_right')) != null ? _ref13 : this.mget('min_border'),
-          requested_border_top: 0,
-          requested_border_bottom: 0,
-          requested_border_left: 0,
-          requested_border_right: 0
-        });
-        this.hidpi = (_ref15 = options.hidpi) != null ? _ref15 : this.mget('hidpi');
-        this.x_range = (_ref16 = options.x_range) != null ? _ref16 : this.mget_obj('x_range');
-        this.y_range = (_ref17 = options.y_range) != null ? _ref17 : this.mget_obj('y_range');
-        this.xmapper = new LinearMapper({
-          source_range: this.x_range,
-          target_range: this.view_state.get('inner_range_horizontal')
-        });
-        this.ymapper = new LinearMapper({
-          source_range: this.y_range,
-          target_range: this.view_state.get('inner_range_vertical')
-        });
-        this.mapper = new GridMapper({
-          domain_mapper: this.xmapper,
-          codomain_mapper: this.ymapper
-        });
-        this.requested_padding = {
-          top: 0,
-          bottom: 0,
-          left: 0,
-          right: 0
-        };
-        this.old_mapper_state = {
-          x: null,
-          y: null
-        };
-        this.am_rendering = false;
-        this.renderers = {};
-        this.tools = {};
-        this.eventSink = _.extend({}, Backbone.Events);
-        this.moveCallbacks = [];
-        this.mousedownCallbacks = [];
-        this.keydownCallbacks = [];
-        this.render_init();
-        this.render_canvas(false);
-        this.atm = new ActiveToolManager(this.eventSink);
-        this.levels = {};
-        for (_i = 0, _len = LEVELS.length; _i < _len; _i++) {
-          level = LEVELS[_i];
-          this.levels[level] = {};
-        }
-        this.build_levels();
-        this.request_render();
-        this.atm.bind_bokeh_events();
-        this.bind_bokeh_events();
-        return this;
-      };
-
-      PlotView.prototype.map_to_screen = function(x, x_units, y, y_units, units) {
-        var sx, sy, _ref1;
-        if (x_units === 'screen') {
-          if (_.isArray(x)) {
-            sx = x.slice(0);
-          } else {
-            sx = new Float64Array(x.length);
-            sx.set(x);
-          }
-          if (_.isArray(y)) {
-            sy = y.slice(0);
-          } else {
-            sy = new Float64Array(y.length);
-            sy.set(y);
-          }
-        } else {
-          _ref1 = this.mapper.v_map_to_target(x, y), sx = _ref1[0], sy = _ref1[1];
-        }
-        sx = this.view_state.v_vx_to_sx(sx);
-        sy = this.view_state.v_vy_to_sy(sy);
-        return [sx, sy];
-      };
-
-      PlotView.prototype.map_from_screen = function(sx, sy, units) {
-        var dx, dy, x, y, _ref1;
-        if (_.isArray(sx)) {
-          dx = sx.slice(0);
-        } else {
-          dx = new Float64Array(sx.length);
-          dx.set(x);
-        }
-        if (_.isArray(sy)) {
-          dy = sy.slice(0);
-        } else {
-          dy = new Float64Array(sy.length);
-          dy.set(y);
-        }
-        sx = this.view_state.v_sx_to_vx(dx);
-        sy = this.view_state.v_sy_to_vy(dy);
-        if (units === 'screen') {
-          x = sx;
-          y = sy;
-        } else {
-          _ref1 = this.mapper.v_map_from_target(sx, sy), x = _ref1[0], y = _ref1[1];
-        }
-        return [x, y];
-      };
-
-      PlotView.prototype.update_range = function(range_info) {
-        this.pause();
-        this.x_range.set(range_info.xr);
-        this.y_range.set(range_info.yr);
-        return this.unpause();
-      };
-
-      PlotView.prototype.build_tools = function() {
-        return build_views(this.tools, this.mget_obj('tools'), this.view_options());
-      };
-
-      PlotView.prototype.build_views = function() {
-        return build_views(this.renderers, this.mget_obj('renderers'), this.view_options());
-      };
-
-      PlotView.prototype.build_levels = function() {
-        var id_, level, old_renderers, renderers_to_remove, t, tools, v, views, _i, _j, _k, _len, _len1, _len2;
-        old_renderers = _.keys(this.renderers);
-        views = this.build_views();
-        renderers_to_remove = _.difference(old_renderers, _.pluck(this.mget_obj('renderers'), 'id'));
-        console.log('renderers_to_remove', renderers_to_remove);
-        for (_i = 0, _len = renderers_to_remove.length; _i < _len; _i++) {
-          id_ = renderers_to_remove[_i];
-          delete this.levels.glyph[id_];
-        }
-        tools = this.build_tools();
-        for (_j = 0, _len1 = views.length; _j < _len1; _j++) {
-          v = views[_j];
-          level = v.mget('level');
-          this.levels[level][v.model.id] = v;
-          v.bind_bokeh_events();
-        }
-        for (_k = 0, _len2 = tools.length; _k < _len2; _k++) {
-          t = tools[_k];
-          level = t.mget('level');
-          this.levels[level][t.model.id] = t;
-          t.bind_bokeh_events();
-        }
-        return this;
-      };
-
-      PlotView.prototype.bind_bokeh_events = function() {
-        var _this = this;
-        safebind(this, this.view_state, 'change', function() {
-          _this.request_render_canvas();
-          return _this.request_render();
-        });
-        safebind(this, this.x_range, 'change', this.request_render);
-        safebind(this, this.y_range, 'change', this.request_render);
-        safebind(this, this.model, 'change:renderers', this.build_levels);
-        safebind(this, this.model, 'change:tool', this.build_levels);
-        safebind(this, this.model, 'change', this.request_render);
-        return safebind(this, this.model, 'destroy', function() {
-          return _this.remove();
-        });
-      };
-
-      PlotView.prototype.render_init = function() {
-        this.$el.append($("<div class='button_bar btn-group pull-top'/>\n<div class='plotarea'>\n<div class='bokeh_canvas_wrapper'>\n  <canvas class='bokeh_canvas'></canvas>\n</div>\n</div>"));
-        this.button_bar = this.$el.find('.button_bar');
-        this.canvas_wrapper = this.$el.find('.bokeh_canvas_wrapper');
-        return this.canvas = this.$el.find('canvas.bokeh_canvas');
-      };
-
-      PlotView.prototype.render_canvas = function(full_render) {
-        var backingStoreRatio, devicePixelRatio, oh, ow, ratio;
-        if (full_render == null) {
-          full_render = true;
-        }
-        this.ctx = this.canvas[0].getContext('2d');
-        if (this.hidpi) {
-          devicePixelRatio = window.devicePixelRatio || 1;
-          backingStoreRatio = this.ctx.webkitBackingStorePixelRatio || this.ctx.mozBackingStorePixelRatio || this.ctx.msBackingStorePixelRatio || this.ctx.oBackingStorePixelRatio || this.ctx.backingStorePixelRatio || 1;
-          ratio = devicePixelRatio / backingStoreRatio;
-        } else {
-          ratio = 1;
-        }
-        ow = this.view_state.get('outer_width');
-        oh = this.view_state.get('outer_height');
-        this.canvas.width = ow * ratio;
-        this.canvas.height = oh * ratio;
-        this.button_bar.attr('style', "width:" + ow + "px;");
-        this.canvas_wrapper.attr('style', "width:" + ow + "px; height:" + oh + "px");
-        this.canvas.attr('style', "width:" + ow + "px;");
-        this.canvas.attr('style', "height:" + oh + "px;");
-        this.canvas.attr('width', ow * ratio).attr('height', oh * ratio);
-        this.$el.attr("width", ow).attr('height', oh);
-        this.ctx.scale(ratio, ratio);
-        this.ctx.translate(0.5, 0.5);
-        if (full_render) {
-          return this.render();
-        }
-      };
-
-      PlotView.prototype.save_png = function() {
-        var data_uri;
-        this.render();
-        data_uri = this.canvas[0].toDataURL();
-        this.model.set('png', this.canvas[0].toDataURL());
-        return bulk_save([this.model]);
-      };
-
-      PlotView.prototype.render = function(force) {
-        var have_new_mapper_state, hpadding, k, level, pr, renderers, sx, sy, sym, th, title, v, xms, yms, _i, _j, _len, _len1, _ref1, _ref2, _ref3;
-        PlotView.__super__.render.call(this);
-        this.requested_padding = {
-          top: 0,
-          bottom: 0,
-          left: 0,
-          right: 0
-        };
-        _ref1 = ['image', 'underlay', 'glyph', 'overlay', 'annotation', 'tool'];
-        for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
-          level = _ref1[_i];
-          renderers = this.levels[level];
-          for (k in renderers) {
-            v = renderers[k];
-            if (v.padding_request != null) {
-              pr = v.padding_request();
-              for (k in pr) {
-                v = pr[k];
-                this.requested_padding[k] += v;
-              }
-            }
-          }
-        }
-        title = this.mget('title');
-        if (title) {
-          this.title_props.set(this.ctx, {});
-          th = this.ctx.measureText(this.mget('title')).ascent;
-          this.requested_padding['top'] += th + this.mget('title_standoff');
-        }
-        sym = this.mget('border_symmetry');
-        if (sym.indexOf('h') >= 0 || sym.indexOf('H') >= 0) {
-          hpadding = Math.max(this.requested_padding['left'], this.requested_padding['right']);
-          this.requested_padding['left'] = hpadding;
-          this.requested_padding['right'] = hpadding;
-        }
-        if (sym.indexOf('v') >= 0 || sym.indexOf('V') >= 0) {
-          hpadding = Math.max(this.requested_padding['top'], this.requested_padding['bottom']);
-          this.requested_padding['top'] = hpadding;
-          this.requested_padding['bottom'] = hpadding;
-        }
-        this.is_paused = true;
-        _ref2 = this.requested_padding;
-        for (k in _ref2) {
-          v = _ref2[k];
-          this.view_state.set("requested_border_" + k, v);
-        }
-        this.is_paused = false;
-        this.ctx.fillStyle = this.mget('border_fill');
-        this.ctx.fillRect(0, 0, this.view_state.get('canvas_width'), this.view_state.get('canvas_height'));
-        this.ctx.fillStyle = this.mget('background_fill');
-        this.ctx.fillRect(this.view_state.get('border_left'), this.view_state.get('border_top'), this.view_state.get('inner_width'), this.view_state.get('inner_height'));
-        if (this.outline_props.do_stroke) {
-          this.outline_props.set(this.ctx, {});
-          this.ctx.strokeRect(this.view_state.get('border_left'), this.view_state.get('border_top'), this.view_state.get('inner_width'), this.view_state.get('inner_height'));
-        }
-        have_new_mapper_state = false;
-        xms = this.xmapper.get('mapper_state')[0];
-        yms = this.ymapper.get('mapper_state')[0];
-        if (Math.abs(this.old_mapper_state.x - xms) > 1e-8 || Math.abs(this.old_mapper_state.y - yms) > 1e-8) {
-          this.old_mapper_state.x = xms;
-          this.old_mapper_state.y = yms;
-          have_new_mapper_state = true;
-        }
-        this.ctx.save();
-        this.ctx.beginPath();
-        this.ctx.rect(this.view_state.get('border_left'), this.view_state.get('border_top'), this.view_state.get('inner_width'), this.view_state.get('inner_height'));
-        this.ctx.clip();
-        this.ctx.beginPath();
-        _ref3 = ['image', 'underlay', 'glyph'];
-        for (_j = 0, _len1 = _ref3.length; _j < _len1; _j++) {
-          level = _ref3[_j];
-          renderers = this.levels[level];
-          for (k in renderers) {
-            v = renderers[k];
-            v.render(have_new_mapper_state);
-          }
-        }
-        this.ctx.restore();
-        this.render_overlays(have_new_mapper_state);
-        if (title) {
-          sx = this.view_state.get('outer_width') / 2;
-          sy = th;
-          this.title_props.set(this.ctx, {});
-          return this.ctx.fillText(title, sx, sy);
-        }
-      };
-
-      PlotView.prototype.render_overlays = function(have_new_mapper_state) {
-        var k, level, renderers, v, _i, _len, _ref1, _results;
-        _ref1 = ['overlay', 'annotation', 'tool'];
-        _results = [];
-        for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
-          level = _ref1[_i];
-          renderers = this.levels[level];
-          _results.push((function() {
-            var _results1;
-            _results1 = [];
-            for (k in renderers) {
-              v = renderers[k];
-              _results1.push(v.render(have_new_mapper_state));
-            }
-            return _results1;
-          })());
-        }
-        return _results;
-      };
-
-      return PlotView;
-
-    })(ContinuumView.View);
-    Plot = (function(_super) {
-      __extends(Plot, _super);
-
-      function Plot() {
-        _ref1 = Plot.__super__.constructor.apply(this, arguments);
-        return _ref1;
-      }
-
-      Plot.prototype.type = 'Plot';
-
-      Plot.prototype.default_view = PlotView;
-
-      Plot.prototype.add_renderers = function(new_renderers) {
-        var renderers;
-        renderers = this.get('renderers');
-        renderers = renderers.concat(new_renderers);
-        return this.set('renderers', renderers);
-      };
-
-      Plot.prototype.parent_properties = ['background_fill', 'border_fill', 'canvas_width', 'canvas_height', 'outer_width', 'outer_height', 'min_border', 'min_border_top', 'min_border_bottom', 'min_border_left', 'min_border_right'];
-
-      Plot.prototype.defaults = function() {
-        return {
-          data_sources: {},
-          renderers: [],
-          tools: [],
-          title: 'Plot'
-        };
-      };
-
-      Plot.prototype.display_defaults = function() {
-        return {
-          hidpi: true,
-          background_fill: "#fff",
-          border_fill: "#fff",
-          border_symmetry: "h",
-          min_border: 40,
-          x_offset: 0,
-          y_offset: 0,
-          canvas_width: 300,
-          canvas_height: 300,
-          outer_width: 300,
-          outer_height: 300,
-          title_standoff: 8,
-          title_text_font: "helvetica",
-          title_text_font_size: "20pt",
-          title_text_font_style: "normal",
-          title_text_color: "#444444",
-          title_text_alpha: 1.0,
-          title_text_align: "center",
-          title_text_baseline: "alphabetic",
-          outline_line_color: '#aaaaaa',
-          outline_line_width: 1,
-          outline_line_alpha: 1.0,
-          outline_line_join: 'miter',
-          outline_line_cap: 'butt',
-          outline_line_dash: [],
-          outline_line_dash_offset: 0
-        };
-      };
-
-      return Plot;
-
-    })(HasParent);
-    Plots = (function(_super) {
-      __extends(Plots, _super);
-
-      function Plots() {
-        _ref2 = Plots.__super__.constructor.apply(this, arguments);
-        return _ref2;
-      }
-
-      Plots.prototype.model = Plot;
-
-      return Plots;
-
-    })(Backbone.Collection);
-    return {
-      "Model": Plot,
-      "Collection": new Plots(),
-      "View": PlotView
-    };
-  });
-
-}).call(this);
-
-/*
-//@ sourceMappingURL=plot.js.map
-*/;
-(function() {
-  var __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
-    __hasProp = {}.hasOwnProperty,
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
-
   define('common/gmap_plot',["underscore", "jquery", "backbone", "./build_views", "./safebind", "./bulk_save", "./continuum_view", "./has_parent", "./view_state", "mapper/1d/linear_mapper", "mapper/2d/grid_mapper", "renderer/properties", "tool/active_tool_manager"], function(_, $, Backbone, build_views, safebind, bulk_save, ContinuumView, HasParent, ViewState, LinearMapper, GridMapper, Properties, ActiveToolManager) {
     var GMapPlot, GMapPlotView, GMapPlots, LEVELS, _ref, _ref1, _ref2;
     LEVELS = ['image', 'underlay', 'glyph', 'overlay', 'annotation', 'tool'];
@@ -14596,6 +14067,9 @@ if ( typeof window === "object" && typeof window.document === "object" ) {
 
       GMapPlotView.prototype.update_range = function(range_info) {
         var center, ne_lat, ne_lng, sw_lat, sw_lng;
+        if (range_info == null) {
+          range_info = this.initial_range_info;
+        }
         this.pause();
         if (range_info.sdx != null) {
           this.map.panBy(range_info.sdx, range_info.sdy);
@@ -14605,7 +14079,10 @@ if ( typeof window === "object" && typeof window.document === "object" ) {
           sw_lat = Math.min(range_info.yr.start, range_info.yr.end);
           ne_lat = Math.max(range_info.yr.start, range_info.yr.end);
           center = new google.maps.LatLng((ne_lat + sw_lat) / 2, (ne_lng + sw_lng) / 2);
-          if (range_info.factor > 0) {
+          if (range_info.factor == null) {
+            this.map.setCenter(center);
+            this.map.setZoom(this.initial_zoom);
+          } else if (range_info.factor > 0) {
             this.zoom_count += 1;
             if (this.zoom_count === 10) {
               this.map.setZoom(this.map.getZoom() + 1);
@@ -14705,11 +14182,11 @@ if ( typeof window === "object" && typeof window.document === "object" ) {
         ih = this.view_state.get('inner_height');
         top = this.view_state.get('border_top');
         left = this.view_state.get('border_left');
-        console.log(this.gmap_div);
         this.gmap_div.attr("style", "top: " + top + "px; left: " + left + "px; position: absolute");
         this.gmap_div.attr('style', "width:" + iw + "px;");
         this.gmap_div.attr('style', "height:" + ih + "px;");
         this.gmap_div.width("" + iw + "px").height("" + ih + "px");
+        this.initial_zoom = this.mget('map_options').zoom;
         build_map = function() {
           var map_options, mo;
           mo = _this.mget('map_options');
@@ -14719,9 +14196,6 @@ if ( typeof window === "object" && typeof window.document === "object" ) {
             disableDefaultUI: true,
             mapTypeId: google.maps.MapTypeId.SATELLITE
           };
-          console.log("FOO", _this);
-          console.log("FOO", _this.gmap_div);
-          console.log("FOO", _this.gmap_div[0]);
           _this.map = new google.maps.Map(_this.gmap_div[0], map_options);
           return google.maps.event.addListener(_this.map, 'bounds_changed', _this.bounds_change);
         };
@@ -14741,10 +14215,22 @@ if ( typeof window === "object" && typeof window.document === "object" ) {
           end: ne.lng(),
           silent: true
         });
-        return this.y_range.set({
+        this.y_range.set({
           start: sw.lat(),
           end: ne.lat()
         });
+        if (this.initial_range_info == null) {
+          return this.initial_range_info = {
+            xr: {
+              start: this.x_range.get('start'),
+              end: this.x_range.get('end')
+            },
+            yr: {
+              start: this.y_range.get('start'),
+              end: this.y_range.get('end')
+            }
+          };
+        }
       };
 
       GMapPlotView.prototype.save_png = function() {
@@ -15359,6 +14845,645 @@ if ( typeof window === "object" && typeof window.document === "object" ) {
 //@ sourceMappingURL=grid_plot.js.map
 */;
 (function() {
+  var __hasProp = {}.hasOwnProperty,
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+  define('mapper/1d/categorical_mapper',["./linear_mapper"], function(LinearMapper) {
+    var CategoricalMapper, _ref;
+    return CategoricalMapper = (function(_super) {
+      __extends(CategoricalMapper, _super);
+
+      function CategoricalMapper() {
+        _ref = CategoricalMapper.__super__.constructor.apply(this, arguments);
+        return _ref;
+      }
+
+      CategoricalMapper.prototype.map_to_target = function(x) {
+        var factor, factors, percent, _ref1;
+        if (typeof x === 'number') {
+          return CategoricalMapper.__super__.map_to_target.call(this, x);
+        }
+        factors = this.get('source_range').get('factors');
+        if (x.indexOf(':') >= 0) {
+          _ref1 = x.split(':'), factor = _ref1[0], percent = _ref1[1];
+          percent = parseFloat(percent);
+          return CategoricalMapper.__super__.map_to_target.call(this, factors.indexOf(factor) + 0.5 + percent);
+        }
+        return CategoricalMapper.__super__.map_to_target.call(this, factors.indexOf(x) + 1);
+      };
+
+      CategoricalMapper.prototype.v_map_to_target = function(xs) {
+        var factor, factors, i, percent, results, x, _i, _ref1, _ref2;
+        if (typeof xs[0] === 'number') {
+          return CategoricalMapper.__super__.v_map_to_target.call(this, xs);
+        }
+        factors = this.get('source_range').get('factors');
+        results = Array(xs.length);
+        for (i = _i = 0, _ref1 = xs.length; 0 <= _ref1 ? _i < _ref1 : _i > _ref1; i = 0 <= _ref1 ? ++_i : --_i) {
+          x = xs[i];
+          if (x.indexOf(':') >= 0) {
+            _ref2 = x.split(':'), factor = _ref2[0], percent = _ref2[1];
+            percent = parseFloat(percent);
+            results[i] = factors.indexOf(factor) + 0.5 + percent;
+          } else {
+            results[i] = factors.indexOf(x) + 1;
+          }
+        }
+        return CategoricalMapper.__super__.v_map_to_target.call(this, results);
+      };
+
+      CategoricalMapper.prototype.map_from_target = function(xprime) {
+        var factors;
+        xprime = CategoricalMapper.__super__.map_from_target.call(this, xprime) - 0.5;
+        factors = this.get('source_range').get('factors');
+        return factors[Math.floor(xprime)];
+      };
+
+      CategoricalMapper.prototype.v_map_from_target = function(xprimes) {
+        var factors, i, result, _i, _ref1;
+        result = CategoricalMapper.__super__.v_map_from_target.call(this, xprimes);
+        factors = this.get('source_range').get('factors');
+        for (i = _i = 0, _ref1 = result.length; 0 <= _ref1 ? _i < _ref1 : _i > _ref1; i = 0 <= _ref1 ? ++_i : --_i) {
+          result[i] = factors[Math.floor(result[i] - 0.5)];
+        }
+        return result;
+      };
+
+      return CategoricalMapper;
+
+    })(LinearMapper);
+  });
+
+}).call(this);
+
+/*
+//@ sourceMappingURL=categorical_mapper.js.map
+*/;
+(function() {
+  var __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
+    __hasProp = {}.hasOwnProperty,
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+  define('common/plot',["underscore", "backbone", "require", "./build_views", "./safebind", "./bulk_save", "./continuum_view", "./has_parent", "./view_state", "mapper/1d/linear_mapper", "mapper/1d/categorical_mapper", "mapper/2d/grid_mapper", "renderer/properties", "tool/active_tool_manager"], function(_, Backbone, require, build_views, safebind, bulk_save, ContinuumView, HasParent, ViewState, LinearMapper, CategoricalMapper, GridMapper, Properties, ActiveToolManager) {
+    var LEVELS, Plot, PlotView, Plots, delay_animation, line_properties, text_properties, throttle_animation, _ref, _ref1, _ref2;
+    line_properties = Properties.line_properties;
+    text_properties = Properties.text_properties;
+    LEVELS = ['image', 'underlay', 'glyph', 'overlay', 'annotation', 'tool'];
+    delay_animation = function(f) {
+      return f();
+    };
+    delay_animation = window.requestAnimationFrame || window.mozRequestAnimationFrame || window.webkitRequestAnimationFrame || window.msRequestAnimationFrame || delay_animation;
+    throttle_animation = function(func, wait) {
+      var args, context, later, pending, previous, result, timeout, _ref;
+      _ref = [null, null, null, null], context = _ref[0], args = _ref[1], timeout = _ref[2], result = _ref[3];
+      previous = 0;
+      pending = false;
+      later = function() {
+        previous = new Date;
+        timeout = null;
+        pending = false;
+        return result = func.apply(context, args);
+      };
+      return function() {
+        var now, remaining;
+        now = new Date;
+        remaining = wait - (now - previous);
+        context = this;
+        args = arguments;
+        if (remaining <= 0 && !pending) {
+          clearTimeout(timeout);
+          pending = true;
+          delay_animation(later);
+        } else if (!timeout) {
+          timeout = setTimeout((function() {
+            return delay_animation(later);
+          }), remaining);
+        }
+        return result;
+      };
+    };
+    PlotView = (function(_super) {
+      __extends(PlotView, _super);
+
+      function PlotView() {
+        this._mousemove = __bind(this._mousemove, this);
+        this._mousedown = __bind(this._mousedown, this);
+        _ref = PlotView.__super__.constructor.apply(this, arguments);
+        return _ref;
+      }
+
+      PlotView.prototype.className = "bokeh plotview";
+
+      PlotView.prototype.events = {
+        "mousemove .bokeh_canvas_wrapper": "_mousemove",
+        "mousedown .bokeh_canvas_wrapper": "_mousedown"
+      };
+
+      PlotView.prototype.view_options = function() {
+        return _.extend({
+          plot_model: this.model,
+          plot_view: this
+        }, this.options);
+      };
+
+      PlotView.prototype._mousedown = function(e) {
+        var f, _i, _len, _ref1, _results;
+        _ref1 = this.mousedownCallbacks;
+        _results = [];
+        for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+          f = _ref1[_i];
+          _results.push(f(e, e.layerX, e.layerY));
+        }
+        return _results;
+      };
+
+      PlotView.prototype._mousemove = function(e) {
+        var f, _i, _len, _ref1, _results;
+        _ref1 = this.moveCallbacks;
+        _results = [];
+        for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+          f = _ref1[_i];
+          _results.push(f(e, e.layerX, e.layerY));
+        }
+        return _results;
+      };
+
+      PlotView.prototype.pause = function() {
+        return this.is_paused = true;
+      };
+
+      PlotView.prototype.unpause = function(render_canvas) {
+        if (render_canvas == null) {
+          render_canvas = false;
+        }
+        this.is_paused = false;
+        if (render_canvas) {
+          return this.request_render_canvas(true);
+        } else {
+          return this.request_render();
+        }
+      };
+
+      PlotView.prototype.request_render = function() {
+        if (!this.is_paused) {
+          this.throttled_render();
+        }
+      };
+
+      PlotView.prototype.request_render_canvas = function(full_render) {
+        if (!this.is_paused) {
+          this.throttled_render_canvas(full_render);
+        }
+      };
+
+      PlotView.prototype.initialize = function(options) {
+        var level, xmapper_type, ymapper_type, _i, _len, _ref1, _ref10, _ref11, _ref12, _ref13, _ref14, _ref15, _ref16, _ref17, _ref2, _ref3, _ref4, _ref5, _ref6, _ref7, _ref8, _ref9;
+        PlotView.__super__.initialize.call(this, _.defaults(options, this.default_options));
+        this.throttled_render = throttle_animation(this.render, 15);
+        this.throttled_render_canvas = throttle_animation(this.render_canvas, 15);
+        this.outline_props = new line_properties(this, {}, 'outline_');
+        this.title_props = new text_properties(this, {}, 'title_');
+        this.view_state = new ViewState({
+          canvas_width: (_ref1 = options.canvas_width) != null ? _ref1 : this.mget('canvas_width'),
+          canvas_height: (_ref2 = options.canvas_height) != null ? _ref2 : this.mget('canvas_height'),
+          x_offset: (_ref3 = options.x_offset) != null ? _ref3 : this.mget('x_offset'),
+          y_offset: (_ref4 = options.y_offset) != null ? _ref4 : this.mget('y_offset'),
+          outer_width: (_ref5 = options.outer_width) != null ? _ref5 : this.mget('outer_width'),
+          outer_height: (_ref6 = options.outer_height) != null ? _ref6 : this.mget('outer_height'),
+          min_border_top: (_ref7 = (_ref8 = options.min_border_top) != null ? _ref8 : this.mget('min_border_top')) != null ? _ref7 : this.mget('min_border'),
+          min_border_bottom: (_ref9 = (_ref10 = options.min_border_bottom) != null ? _ref10 : this.mget('min_border_bottom')) != null ? _ref9 : this.mget('min_border'),
+          min_border_left: (_ref11 = (_ref12 = options.min_border_left) != null ? _ref12 : this.mget('min_border_left')) != null ? _ref11 : this.mget('min_border'),
+          min_border_right: (_ref13 = (_ref14 = options.min_border_right) != null ? _ref14 : this.mget('min_border_right')) != null ? _ref13 : this.mget('min_border'),
+          requested_border_top: 0,
+          requested_border_bottom: 0,
+          requested_border_left: 0,
+          requested_border_right: 0
+        });
+        this.hidpi = (_ref15 = options.hidpi) != null ? _ref15 : this.mget('hidpi');
+        this.x_range = (_ref16 = options.x_range) != null ? _ref16 : this.mget_obj('x_range');
+        this.y_range = (_ref17 = options.y_range) != null ? _ref17 : this.mget_obj('y_range');
+        xmapper_type = LinearMapper;
+        if (this.x_range.type === "FactorRange") {
+          xmapper_type = CategoricalMapper;
+        }
+        this.xmapper = new xmapper_type({
+          source_range: this.x_range,
+          target_range: this.view_state.get('inner_range_horizontal')
+        });
+        ymapper_type = LinearMapper;
+        if (this.y_range.type === "FactorRange") {
+          ymapper_type = CategoricalMapper;
+        }
+        this.ymapper = new ymapper_type({
+          source_range: this.y_range,
+          target_range: this.view_state.get('inner_range_vertical')
+        });
+        this.mapper = new GridMapper({
+          domain_mapper: this.xmapper,
+          codomain_mapper: this.ymapper
+        });
+        this.requested_padding = {
+          top: 0,
+          bottom: 0,
+          left: 0,
+          right: 0
+        };
+        this.old_mapper_state = {
+          x: null,
+          y: null
+        };
+        this.am_rendering = false;
+        this.renderers = {};
+        this.tools = {};
+        this.eventSink = _.extend({}, Backbone.Events);
+        this.moveCallbacks = [];
+        this.mousedownCallbacks = [];
+        this.keydownCallbacks = [];
+        this.render_init();
+        this.render_canvas(false);
+        this.atm = new ActiveToolManager(this.eventSink);
+        this.levels = {};
+        for (_i = 0, _len = LEVELS.length; _i < _len; _i++) {
+          level = LEVELS[_i];
+          this.levels[level] = {};
+        }
+        this.build_levels();
+        this.request_render();
+        this.atm.bind_bokeh_events();
+        this.bind_bokeh_events();
+        return this;
+      };
+
+      PlotView.prototype.map_to_screen = function(x, x_units, y, y_units) {
+        var sx, sy;
+        if (x_units === 'screen') {
+          if (_.isArray(x)) {
+            sx = x.slice(0);
+          } else {
+            sx = new Float64Array(x.length);
+            sx.set(x);
+          }
+        } else {
+          sx = this.xmapper.v_map_to_target(x);
+        }
+        if (y_units === 'screen') {
+          if (_.isArray(y)) {
+            sy = y.slice(0);
+          } else {
+            sy = new Float64Array(y.length);
+            sy.set(y);
+          }
+        } else {
+          sy = this.ymapper.v_map_to_target(y);
+        }
+        sx = this.view_state.v_vx_to_sx(sx);
+        sy = this.view_state.v_vy_to_sy(sy);
+        return [sx, sy];
+      };
+
+      PlotView.prototype.map_from_screen = function(sx, sy, units) {
+        var dx, dy, x, y, _ref1;
+        if (_.isArray(sx)) {
+          dx = sx.slice(0);
+        } else {
+          dx = new Float64Array(sx.length);
+          dx.set(x);
+        }
+        if (_.isArray(sy)) {
+          dy = sy.slice(0);
+        } else {
+          dy = new Float64Array(sy.length);
+          dy.set(y);
+        }
+        sx = this.view_state.v_sx_to_vx(dx);
+        sy = this.view_state.v_sy_to_vy(dy);
+        if (units === 'screen') {
+          x = sx;
+          y = sy;
+        } else {
+          _ref1 = this.mapper.v_map_from_target(sx, sy), x = _ref1[0], y = _ref1[1];
+        }
+        return [x, y];
+      };
+
+      PlotView.prototype.update_range = function(range_info) {
+        if (range_info == null) {
+          range_info = this.initial_range_info;
+        }
+        this.pause();
+        this.x_range.set(range_info.xr);
+        this.y_range.set(range_info.yr);
+        return this.unpause();
+      };
+
+      PlotView.prototype.build_tools = function() {
+        return build_views(this.tools, this.mget_obj('tools'), this.view_options());
+      };
+
+      PlotView.prototype.build_views = function() {
+        return build_views(this.renderers, this.mget_obj('renderers'), this.view_options());
+      };
+
+      PlotView.prototype.build_levels = function() {
+        var id_, level, old_renderers, renderers_to_remove, t, tools, v, views, _i, _j, _k, _len, _len1, _len2;
+        old_renderers = _.keys(this.renderers);
+        views = this.build_views();
+        renderers_to_remove = _.difference(old_renderers, _.pluck(this.mget_obj('renderers'), 'id'));
+        console.log('renderers_to_remove', renderers_to_remove);
+        for (_i = 0, _len = renderers_to_remove.length; _i < _len; _i++) {
+          id_ = renderers_to_remove[_i];
+          delete this.levels.glyph[id_];
+        }
+        tools = this.build_tools();
+        for (_j = 0, _len1 = views.length; _j < _len1; _j++) {
+          v = views[_j];
+          level = v.mget('level');
+          this.levels[level][v.model.id] = v;
+          v.bind_bokeh_events();
+        }
+        for (_k = 0, _len2 = tools.length; _k < _len2; _k++) {
+          t = tools[_k];
+          level = t.mget('level');
+          this.levels[level][t.model.id] = t;
+          t.bind_bokeh_events();
+        }
+        return this;
+      };
+
+      PlotView.prototype.bind_bokeh_events = function() {
+        var _this = this;
+        safebind(this, this.view_state, 'change', function() {
+          _this.request_render_canvas();
+          return _this.request_render();
+        });
+        safebind(this, this.x_range, 'change', this.request_render);
+        safebind(this, this.y_range, 'change', this.request_render);
+        safebind(this, this.model, 'change:renderers', this.build_levels);
+        safebind(this, this.model, 'change:tool', this.build_levels);
+        safebind(this, this.model, 'change', this.request_render);
+        return safebind(this, this.model, 'destroy', function() {
+          return _this.remove();
+        });
+      };
+
+      PlotView.prototype.render_init = function() {
+        this.$el.append($("<div class='button_bar btn-group pull-top'/>\n<div class='plotarea'>\n<div class='bokeh_canvas_wrapper'>\n  <canvas class='bokeh_canvas'></canvas>\n</div>\n</div>"));
+        this.button_bar = this.$el.find('.button_bar');
+        this.canvas_wrapper = this.$el.find('.bokeh_canvas_wrapper');
+        return this.canvas = this.$el.find('canvas.bokeh_canvas');
+      };
+
+      PlotView.prototype.render_canvas = function(full_render) {
+        var backingStoreRatio, devicePixelRatio, oh, ow, ratio;
+        if (full_render == null) {
+          full_render = true;
+        }
+        this.ctx = this.canvas[0].getContext('2d');
+        if (this.hidpi) {
+          devicePixelRatio = window.devicePixelRatio || 1;
+          backingStoreRatio = this.ctx.webkitBackingStorePixelRatio || this.ctx.mozBackingStorePixelRatio || this.ctx.msBackingStorePixelRatio || this.ctx.oBackingStorePixelRatio || this.ctx.backingStorePixelRatio || 1;
+          ratio = devicePixelRatio / backingStoreRatio;
+        } else {
+          ratio = 1;
+        }
+        ow = this.view_state.get('outer_width');
+        oh = this.view_state.get('outer_height');
+        this.canvas.width = ow * ratio;
+        this.canvas.height = oh * ratio;
+        this.button_bar.attr('style', "width:" + ow + "px;");
+        this.canvas_wrapper.attr('style', "width:" + ow + "px; height:" + oh + "px");
+        this.canvas.attr('style', "width:" + ow + "px;");
+        this.canvas.attr('style', "height:" + oh + "px;");
+        this.canvas.attr('width', ow * ratio).attr('height', oh * ratio);
+        this.$el.attr("width", ow).attr('height', oh);
+        this.ctx.scale(ratio, ratio);
+        this.ctx.translate(0.5, 0.5);
+        if (full_render) {
+          return this.render();
+        }
+      };
+
+      PlotView.prototype.save_png = function() {
+        var data_uri;
+        this.render();
+        data_uri = this.canvas[0].toDataURL();
+        this.model.set('png', this.canvas[0].toDataURL());
+        return bulk_save([this.model]);
+      };
+
+      PlotView.prototype.render = function(force) {
+        var have_new_mapper_state, hpadding, k, level, pr, renderers, sx, sy, sym, th, title, v, xms, yms, _i, _j, _len, _len1, _ref1, _ref2, _ref3;
+        PlotView.__super__.render.call(this);
+        if ((this.initial_range_info == null) && (this.x_range.get('start') != null)) {
+          this.initial_range_info = {
+            xr: {
+              start: this.x_range.get('start'),
+              end: this.x_range.get('end')
+            },
+            yr: {
+              start: this.y_range.get('start'),
+              end: this.y_range.get('end')
+            }
+          };
+        }
+        this.requested_padding = {
+          top: 0,
+          bottom: 0,
+          left: 0,
+          right: 0
+        };
+        _ref1 = ['image', 'underlay', 'glyph', 'overlay', 'annotation', 'tool'];
+        for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+          level = _ref1[_i];
+          renderers = this.levels[level];
+          for (k in renderers) {
+            v = renderers[k];
+            if (v.padding_request != null) {
+              pr = v.padding_request();
+              for (k in pr) {
+                v = pr[k];
+                this.requested_padding[k] += v;
+              }
+            }
+          }
+        }
+        title = this.mget('title');
+        if (title) {
+          this.title_props.set(this.ctx, {});
+          th = this.ctx.measureText(this.mget('title')).ascent;
+          this.requested_padding['top'] += th + this.mget('title_standoff');
+        }
+        sym = this.mget('border_symmetry');
+        if (sym.indexOf('h') >= 0 || sym.indexOf('H') >= 0) {
+          hpadding = Math.max(this.requested_padding['left'], this.requested_padding['right']);
+          this.requested_padding['left'] = hpadding;
+          this.requested_padding['right'] = hpadding;
+        }
+        if (sym.indexOf('v') >= 0 || sym.indexOf('V') >= 0) {
+          hpadding = Math.max(this.requested_padding['top'], this.requested_padding['bottom']);
+          this.requested_padding['top'] = hpadding;
+          this.requested_padding['bottom'] = hpadding;
+        }
+        this.is_paused = true;
+        _ref2 = this.requested_padding;
+        for (k in _ref2) {
+          v = _ref2[k];
+          this.view_state.set("requested_border_" + k, v);
+        }
+        this.is_paused = false;
+        this.ctx.fillStyle = this.mget('border_fill');
+        this.ctx.fillRect(0, 0, this.view_state.get('canvas_width'), this.view_state.get('canvas_height'));
+        this.ctx.fillStyle = this.mget('background_fill');
+        this.ctx.fillRect(this.view_state.get('border_left'), this.view_state.get('border_top'), this.view_state.get('inner_width'), this.view_state.get('inner_height'));
+        if (this.outline_props.do_stroke) {
+          this.outline_props.set(this.ctx, {});
+          this.ctx.strokeRect(this.view_state.get('border_left'), this.view_state.get('border_top'), this.view_state.get('inner_width'), this.view_state.get('inner_height'));
+        }
+        have_new_mapper_state = false;
+        xms = this.xmapper.get('mapper_state')[0];
+        yms = this.ymapper.get('mapper_state')[0];
+        if (Math.abs(this.old_mapper_state.x - xms) > 1e-8 || Math.abs(this.old_mapper_state.y - yms) > 1e-8) {
+          this.old_mapper_state.x = xms;
+          this.old_mapper_state.y = yms;
+          have_new_mapper_state = true;
+        }
+        this.ctx.save();
+        this.ctx.beginPath();
+        this.ctx.rect(this.view_state.get('border_left'), this.view_state.get('border_top'), this.view_state.get('inner_width'), this.view_state.get('inner_height'));
+        this.ctx.clip();
+        this.ctx.beginPath();
+        _ref3 = ['image', 'underlay', 'glyph'];
+        for (_j = 0, _len1 = _ref3.length; _j < _len1; _j++) {
+          level = _ref3[_j];
+          renderers = this.levels[level];
+          for (k in renderers) {
+            v = renderers[k];
+            v.render(have_new_mapper_state);
+          }
+        }
+        this.ctx.restore();
+        this.render_overlays(have_new_mapper_state);
+        if (title) {
+          sx = this.view_state.get('outer_width') / 2;
+          sy = th;
+          this.title_props.set(this.ctx, {});
+          return this.ctx.fillText(title, sx, sy);
+        }
+      };
+
+      PlotView.prototype.render_overlays = function(have_new_mapper_state) {
+        var k, level, renderers, v, _i, _len, _ref1, _results;
+        _ref1 = ['overlay', 'annotation', 'tool'];
+        _results = [];
+        for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+          level = _ref1[_i];
+          renderers = this.levels[level];
+          _results.push((function() {
+            var _results1;
+            _results1 = [];
+            for (k in renderers) {
+              v = renderers[k];
+              _results1.push(v.render(have_new_mapper_state));
+            }
+            return _results1;
+          })());
+        }
+        return _results;
+      };
+
+      return PlotView;
+
+    })(ContinuumView.View);
+    Plot = (function(_super) {
+      __extends(Plot, _super);
+
+      function Plot() {
+        _ref1 = Plot.__super__.constructor.apply(this, arguments);
+        return _ref1;
+      }
+
+      Plot.prototype.type = 'Plot';
+
+      Plot.prototype.default_view = PlotView;
+
+      Plot.prototype.add_renderers = function(new_renderers) {
+        var renderers;
+        renderers = this.get('renderers');
+        renderers = renderers.concat(new_renderers);
+        return this.set('renderers', renderers);
+      };
+
+      Plot.prototype.parent_properties = ['background_fill', 'border_fill', 'canvas_width', 'canvas_height', 'outer_width', 'outer_height', 'min_border', 'min_border_top', 'min_border_bottom', 'min_border_left', 'min_border_right'];
+
+      Plot.prototype.defaults = function() {
+        return {
+          data_sources: {},
+          renderers: [],
+          tools: [],
+          title: 'Plot'
+        };
+      };
+
+      Plot.prototype.display_defaults = function() {
+        return {
+          hidpi: true,
+          background_fill: "#fff",
+          border_fill: "#fff",
+          border_symmetry: "h",
+          min_border: 40,
+          x_offset: 0,
+          y_offset: 0,
+          canvas_width: 300,
+          canvas_height: 300,
+          outer_width: 300,
+          outer_height: 300,
+          title_standoff: 8,
+          title_text_font: "helvetica",
+          title_text_font_size: "20pt",
+          title_text_font_style: "normal",
+          title_text_color: "#444444",
+          title_text_alpha: 1.0,
+          title_text_align: "center",
+          title_text_baseline: "alphabetic",
+          outline_line_color: '#aaaaaa',
+          outline_line_width: 1,
+          outline_line_alpha: 1.0,
+          outline_line_join: 'miter',
+          outline_line_cap: 'butt',
+          outline_line_dash: [],
+          outline_line_dash_offset: 0
+        };
+      };
+
+      return Plot;
+
+    })(HasParent);
+    Plots = (function(_super) {
+      __extends(Plots, _super);
+
+      function Plots() {
+        _ref2 = Plots.__super__.constructor.apply(this, arguments);
+        return _ref2;
+      }
+
+      Plots.prototype.model = Plot;
+
+      return Plots;
+
+    })(Backbone.Collection);
+    return {
+      "Model": Plot,
+      "Collection": new Plots(),
+      "View": PlotView
+    };
+  });
+
+}).call(this);
+
+/*
+//@ sourceMappingURL=plot.js.map
+*/;
+(function() {
   var __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
     __hasProp = {}.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
@@ -15534,6 +15659,160 @@ if ( typeof window === "object" && typeof window.document === "object" ) {
   var __hasProp = {}.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
+  define('range/factor_range',["backbone", "common/has_properties"], function(Backbone, HasProperties) {
+    var FactorRange, FactorRanges, _ref, _ref1;
+    FactorRange = (function(_super) {
+      __extends(FactorRange, _super);
+
+      function FactorRange() {
+        _ref = FactorRange.__super__.constructor.apply(this, arguments);
+        return _ref;
+      }
+
+      FactorRange.prototype.type = 'FactorRange';
+
+      FactorRange.prototype.initialize = function(attrs, options) {
+        FactorRange.__super__.initialize.call(this, attrs, options);
+        this.register_property('end', function() {
+          return this.get('factors').length + 0.5;
+        }, true);
+        this.add_dependencies('end', this, ['factors']);
+        this.register_property('min', function() {
+          return this.get('start');
+        }, true);
+        this.add_dependencies('min', this, ['factors']);
+        this.register_property('max', function() {
+          return this.get('end');
+        }, true);
+        return this.add_dependencies('max', this, ['factors']);
+      };
+
+      FactorRange.prototype.defaults = function() {
+        return {
+          start: 0.5,
+          factors: []
+        };
+      };
+
+      return FactorRange;
+
+    })(HasProperties);
+    FactorRanges = (function(_super) {
+      __extends(FactorRanges, _super);
+
+      function FactorRanges() {
+        _ref1 = FactorRanges.__super__.constructor.apply(this, arguments);
+        return _ref1;
+      }
+
+      FactorRanges.prototype.model = FactorRange;
+
+      return FactorRanges;
+
+    })(Backbone.Collection);
+    return {
+      "Model": FactorRange,
+      "Collection": new FactorRanges()
+    };
+  });
+
+}).call(this);
+
+/*
+//@ sourceMappingURL=factor_range.js.map
+*/;
+(function() {
+  var __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
+    __hasProp = {}.hasOwnProperty,
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+  define('range/data_factor_range',["underscore", "backbone", "range/factor_range"], function(_, Backbone, FactorRange) {
+    var DataFactorRange, DataFactorRanges, _ref, _ref1;
+    DataFactorRange = (function(_super) {
+      __extends(DataFactorRange, _super);
+
+      function DataFactorRange() {
+        this._get_values = __bind(this._get_values, this);
+        _ref = DataFactorRange.__super__.constructor.apply(this, arguments);
+        return _ref;
+      }
+
+      DataFactorRange.prototype.type = 'DataFactorRange';
+
+      DataFactorRange.prototype._get_values = function() {
+        var columns, temp, uniques, val, x, _i, _len;
+        columns = (function() {
+          var _i, _len, _ref1, _results;
+          _ref1 = this.get('columns');
+          _results = [];
+          for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+            x = _ref1[_i];
+            _results.push(this.get_obj('data_source').getcolumn(x));
+          }
+          return _results;
+        }).call(this);
+        columns = _.reduce(columns, (function(x, y) {
+          return x.concat(y);
+        }), []);
+        temp = {};
+        for (_i = 0, _len = columns.length; _i < _len; _i++) {
+          val = columns[_i];
+          temp[val] = true;
+        }
+        uniques = _.keys(temp);
+        uniques = _.sortBy(uniques, (function(x) {
+          return x;
+        }));
+        return uniques;
+      };
+
+      DataFactorRange.prototype.dinitialize = function(attrs, options) {
+        DataFactorRange.__super__.dinitialize.call(this, attrs, options);
+        this.register_property;
+        this.register_property('values', this._get_values, true);
+        this.add_dependencies('values', this, ['data_source', 'columns']);
+        return this.add_dependencies('values', this.get_obj('data_source'), ['data_source', 'columns']);
+      };
+
+      DataFactorRange.prototype.defaults = function() {
+        return {
+          values: [],
+          columns: [],
+          data_source: null
+        };
+      };
+
+      return DataFactorRange;
+
+    })(FactorRange.Model);
+    DataFactorRanges = (function(_super) {
+      __extends(DataFactorRanges, _super);
+
+      function DataFactorRanges() {
+        _ref1 = DataFactorRanges.__super__.constructor.apply(this, arguments);
+        return _ref1;
+      }
+
+      DataFactorRanges.prototype.model = DataFactorRange;
+
+      return DataFactorRanges;
+
+    })(Backbone.Collection);
+    return {
+      "Model": DataFactorRange,
+      "Collection": new DataFactorRanges
+    };
+  });
+
+}).call(this);
+
+/*
+//@ sourceMappingURL=data_factor_range.js.map
+*/;
+(function() {
+  var __hasProp = {}.hasOwnProperty,
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
   define('range/data_range1d',["underscore", "backbone", "range/range1d"], function(_, Backbone, Range1d) {
     var DataRange1d, DataRange1ds, _ref, _ref1;
     DataRange1d = (function(_super) {
@@ -15662,143 +15941,6 @@ if ( typeof window === "object" && typeof window.document === "object" ) {
   var __hasProp = {}.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
-  define('range/factor_range',["backbone", "common/has_properties"], function(Backbone, HasProperties) {
-    var FactorRange, FactorRanges, _ref, _ref1;
-    FactorRange = (function(_super) {
-      __extends(FactorRange, _super);
-
-      function FactorRange() {
-        _ref = FactorRange.__super__.constructor.apply(this, arguments);
-        return _ref;
-      }
-
-      FactorRange.prototype.type = 'FactorRange';
-
-      FactorRange.prototype.defaults = function() {
-        return {
-          values: []
-        };
-      };
-
-      return FactorRange;
-
-    })(HasProperties);
-    FactorRanges = (function(_super) {
-      __extends(FactorRanges, _super);
-
-      function FactorRanges() {
-        _ref1 = FactorRanges.__super__.constructor.apply(this, arguments);
-        return _ref1;
-      }
-
-      FactorRanges.prototype.model = FactorRange;
-
-      return FactorRanges;
-
-    })(Backbone.Collection);
-    return {
-      "Model": FactorRange,
-      "Collection": new FactorRanges()
-    };
-  });
-
-}).call(this);
-
-/*
-//@ sourceMappingURL=factor_range.js.map
-*/;
-(function() {
-  var __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
-    __hasProp = {}.hasOwnProperty,
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
-
-  define('range/data_factor_range',["underscore", "backbone", "range/factor_range"], function(_, Backbone, FactorRange) {
-    var DataFactorRange, DataFactorRanges, _ref, _ref1;
-    DataFactorRange = (function(_super) {
-      __extends(DataFactorRange, _super);
-
-      function DataFactorRange() {
-        this._get_values = __bind(this._get_values, this);
-        _ref = DataFactorRange.__super__.constructor.apply(this, arguments);
-        return _ref;
-      }
-
-      DataFactorRange.prototype.type = 'DataFactorRange';
-
-      DataFactorRange.prototype._get_values = function() {
-        var columns, temp, uniques, val, x, _i, _len;
-        columns = (function() {
-          var _i, _len, _ref1, _results;
-          _ref1 = this.get('columns');
-          _results = [];
-          for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
-            x = _ref1[_i];
-            _results.push(this.get_obj('data_source').getcolumn(x));
-          }
-          return _results;
-        }).call(this);
-        columns = _.reduce(columns, (function(x, y) {
-          return x.concat(y);
-        }), []);
-        temp = {};
-        for (_i = 0, _len = columns.length; _i < _len; _i++) {
-          val = columns[_i];
-          temp[val] = true;
-        }
-        uniques = _.keys(temp);
-        uniques = _.sortBy(uniques, (function(x) {
-          return x;
-        }));
-        return uniques;
-      };
-
-      DataFactorRange.prototype.dinitialize = function(attrs, options) {
-        DataFactorRange.__super__.dinitialize.call(this, attrs, options);
-        this.register_property;
-        this.register_property('values', this._get_values, true);
-        this.add_dependencies('values', this, ['data_source', 'columns']);
-        return this.add_dependencies('values', this.get_obj('data_source'), ['data_source', 'columns']);
-      };
-
-      DataFactorRange.prototype.defaults = function() {
-        return {
-          values: [],
-          columns: [],
-          data_source: null
-        };
-      };
-
-      return DataFactorRange;
-
-    })(FactorRange.Model);
-    DataFactorRanges = (function(_super) {
-      __extends(DataFactorRanges, _super);
-
-      function DataFactorRanges() {
-        _ref1 = DataFactorRanges.__super__.constructor.apply(this, arguments);
-        return _ref1;
-      }
-
-      DataFactorRanges.prototype.model = DataFactorRange;
-
-      return DataFactorRanges;
-
-    })(Backbone.Collection);
-    return {
-      "Model": DataFactorRange,
-      "Collection": new DataFactorRanges
-    };
-  });
-
-}).call(this);
-
-/*
-//@ sourceMappingURL=data_factor_range.js.map
-*/;
-(function() {
-  var __hasProp = {}.hasOwnProperty,
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
-
   define('common/plot_widget',["./continuum_view", "./safebind"], function(ContinuumView, safebind) {
     var PlotWidget, _ref;
     return PlotWidget = (function(_super) {
@@ -15888,818 +16030,233 @@ if ( typeof window === "object" && typeof window.document === "object" ) {
 //@ sourceMappingURL=plot_widget.js.map
 */;
 (function() {
+  define('common/textutils',[], function() {
+    var cache, getTextHeight;
+    cache = {};
+    getTextHeight = function(font) {
+      var block, body, div, result, text;
+      if (cache[font] != null) {
+        return cache[font];
+      }
+      text = $('<span>Hg</span>').css({
+        font: font
+      });
+      block = $('<div style="display: inline-block; width: 1px; height: 0px;"></div>');
+      div = $('<div></div>');
+      div.append(text, block);
+      body = $('body');
+      body.append(div);
+      try {
+        result = {};
+        block.css({
+          verticalAlign: 'baseline'
+        });
+        result.ascent = block.offset().top - text.offset().top;
+        block.css({
+          verticalAlign: 'bottom'
+        });
+        result.height = block.offset().top - text.offset().top;
+        result.descent = result.height - result.ascent;
+      } finally {
+        div.remove();
+      }
+      cache[font] = result;
+      return result;
+    };
+    return {
+      "getTextHeight": getTextHeight
+    };
+  });
+
+}).call(this);
+
+/*
+//@ sourceMappingURL=textutils.js.map
+*/;
+(function() {
   var __hasProp = {}.hasOwnProperty,
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; },
-    __indexOf = [].indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; };
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
-  define('renderer/glyph/glyph',["underscore", "common/has_parent", "common/plot_widget", "renderer/properties"], function(_, HasParent, PlotWidget, Properties) {
-    var Glyph, GlyphView, _ref, _ref1;
-    GlyphView = (function(_super) {
-      __extends(GlyphView, _super);
+  define('renderer/annotation/legend',["underscore", "common/has_parent", "common/plot_widget", "common/textutils", "renderer/properties"], function(_, HasParent, PlotWidget, textutils, Properties) {
+    var Legend, LegendView, Legends, glyph_properties, line_properties, text_properties, _ref, _ref1, _ref2;
+    glyph_properties = Properties.glyph_properties;
+    line_properties = Properties.line_properties;
+    text_properties = Properties.text_properties;
+    LegendView = (function(_super) {
+      __extends(LegendView, _super);
 
-      function GlyphView() {
-        _ref = GlyphView.__super__.constructor.apply(this, arguments);
+      function LegendView() {
+        _ref = LegendView.__super__.constructor.apply(this, arguments);
         return _ref;
       }
 
-      GlyphView.prototype.initialize = function(options) {
-        var spec;
-        GlyphView.__super__.initialize.call(this, options);
-        this.need_set_data = true;
-        this.glyph_props = this.init_glyph(this.mget('glyphspec'));
-        this.have_selection_props = false;
-        if (this.mget('selection_glyphspec')) {
-          spec = _.extend({}, this.mget('glyphspec'), this.mget('selection_glyphspec'));
-          this.selection_glyphprops = this.init_glyph(spec);
-          this.have_selection_props = true;
+      LegendView.prototype.initialize = function(options) {
+        LegendView.__super__.initialize.call(this, options);
+        this.label_props = new text_properties(this, this.model, 'label_');
+        this.border_props = new line_properties(this, this.model, 'border_');
+        if (this.mget('legend_names')) {
+          this.legend_names = this.mget('legend_names');
         } else {
-          this.selection_glyphprops = this.glyph_props;
+          this.legends = this.mget('legends');
+          this.legend_names = _.keys(this.mget('legends'));
         }
-        if (this.mget('nonselection_glyphspec')) {
-          spec = _.extend({}, this.mget('glyphspec'), this.mget('nonselection_glyphspec'));
-          this.nonselection_glyphprops = this.init_glyph(spec);
-          return this.have_selection_props = true;
-        } else {
-          return this.nonselection_glyphprops = this.glyph_props;
-        }
+        return this.calc_dims();
       };
 
-      GlyphView.prototype.init_glyph = function(glyphspec) {
-        var glyph_props, props;
-        props = {};
-        if (__indexOf.call(this._properties, 'line') >= 0) {
-          props['line_properties'] = new Properties.line_properties(this, glyphspec);
-        }
-        if (__indexOf.call(this._properties, 'fill') >= 0) {
-          props['fill_properties'] = new Properties.fill_properties(this, glyphspec);
-        }
-        if (__indexOf.call(this._properties, 'text') >= 0) {
-          props['text_properties'] = new Properties.text_properties(this, glyphspec);
-        }
-        glyph_props = new Properties.glyph_properties(this, glyphspec, this._fields, props);
-        return glyph_props;
+      LegendView.prototype.delegateEvents = function(events) {
+        LegendView.__super__.delegateEvents.call(this, events);
+        return this.listenTo(this.plot_view.view_state, 'change', this.calc_dims);
       };
 
-      GlyphView.prototype.set_data = function(request_render) {
-        var dir, field, i, junk, len, source, values, x, _i, _j, _k, _len, _ref1, _ref2, _ref3, _results;
-        if (request_render == null) {
-          request_render = true;
-        }
-        source = this.mget_obj('data_source');
-        _ref1 = this._fields;
-        for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
-          field = _ref1[_i];
-          if (field.indexOf(":") > -1) {
-            _ref2 = field.split(":"), field = _ref2[0], junk = _ref2[1];
-          }
-          this[field] = this.glyph_props.source_v_select(field, source);
-          if (field === "direction") {
-            values = new Uint8Array(this.direction.length);
-            for (i = _j = 0, _ref3 = this.direction.length; 0 <= _ref3 ? _j < _ref3 : _j > _ref3; i = 0 <= _ref3 ? ++_j : --_j) {
-              dir = this.direction[i];
-              if (dir === 'clock') {
-                values[i] = false;
-              } else if (dir === 'anticlock') {
-                values[i] = true;
-              } else {
-                values = NaN;
-              }
-            }
-            this.direction = values;
-          }
-          if (field.indexOf("angle") > -1) {
-            this[field] = (function() {
-              var _k, _len1, _ref4, _results;
-              _ref4 = this[field];
-              _results = [];
-              for (_k = 0, _len1 = _ref4.length; _k < _len1; _k++) {
-                x = _ref4[_k];
-                _results.push(-x);
-              }
-              return _results;
-            }).call(this);
-          }
-        }
-        if (this._set_data != null) {
-          this._set_data();
-        }
-        len = this[field].length;
-        this.all_indices = (function() {
-          _results = [];
-          for (var _k = 0; 0 <= len ? _k < len : _k > len; 0 <= len ? _k++ : _k--){ _results.push(_k); }
-          return _results;
-        }).apply(this);
-        this.have_new_data = true;
-        if (request_render) {
-          return this.request_render();
-        }
-      };
-
-      GlyphView.prototype.render = function(have_new_mapper_state) {
-        var ctx, do_render, i, idx, indices, nonselected, selected, selected_mask, _i, _j, _len, _len1,
-          _this = this;
-        if (have_new_mapper_state == null) {
-          have_new_mapper_state = true;
-        }
-        if (this.need_set_data) {
-          this.set_data(false);
-          this.need_set_data = false;
-        }
-        this._map_data();
-        if (this._mask_data != null) {
-          indices = this._mask_data();
-        } else {
-          indices = this.all_indices;
-        }
+      LegendView.prototype.calc_dims = function(options) {
+        var ctx, h_range, label_height, label_width, legend_padding, legend_spacing, orientation, text_width, text_widths, v_range, x, y, _ref1;
+        label_height = this.mget('label_height');
+        this.glyph_height = this.mget('glyph_height');
+        label_width = this.mget('label_width');
+        this.glyph_width = this.mget('glyph_width');
+        legend_spacing = this.mget('legend_spacing');
+        this.label_height = _.max([textutils.getTextHeight(this.label_props.font(this)), label_height, this.glyph_height]);
+        this.legend_height = this.label_height;
+        this.legend_height = this.legend_names.length * this.legend_height + (1 + this.legend_names.length) * legend_spacing;
         ctx = this.plot_view.ctx;
         ctx.save();
-        do_render = function(ctx, indices, glyph_props) {
-          var source;
-          source = _this.mget_obj('data_source');
-          if (_this.have_new_data) {
-            if ((glyph_props.fill_properties != null) && glyph_props.fill_properties.do_fill) {
-              glyph_props.fill_properties.set_prop_cache(source);
-            }
-            if ((glyph_props.line_properties != null) && glyph_props.line_properties.do_stroke) {
-              glyph_props.line_properties.set_prop_cache(source);
-            }
-            if (glyph_props.text_properties != null) {
-              glyph_props.text_properties.set_prop_cache(source);
-            }
-          }
-          return _this._render(ctx, indices, glyph_props);
-        };
-        selected = this.mget_obj('data_source').get('selected');
-        if (selected && selected.length && this.have_selection_props) {
-          selected_mask = (function() {
-            var _i, _len, _ref1, _results;
-            _ref1 = this.all_indices;
-            _results = [];
-            for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
-              i = _ref1[_i];
-              _results.push(false);
-            }
-            return _results;
-          }).call(this);
-          for (_i = 0, _len = selected.length; _i < _len; _i++) {
-            idx = selected[_i];
-            selected_mask[idx] = true;
-          }
-          selected = new Array();
-          nonselected = new Array();
-          for (_j = 0, _len1 = indices.length; _j < _len1; _j++) {
-            i = indices[_j];
-            if (selected_mask[i]) {
-              selected.push(i);
-            } else {
-              nonselected.push(i);
-            }
-          }
-          do_render(ctx, selected, this.selection_glyphprops);
-          do_render(ctx, nonselected, this.nonselection_glyphprops);
-        } else {
-          do_render(ctx, indices, this.glyph_props);
+        this.label_props.set(ctx, this);
+        text_widths = _.map(this.legend_names, function(txt) {
+          return ctx.measureText(txt).width;
+        });
+        ctx.restore();
+        text_width = _.max(text_widths);
+        this.label_width = _.max([text_width, label_width]);
+        this.legend_width = this.label_width + this.glyph_width + 3 * legend_spacing;
+        orientation = this.mget('orientation');
+        legend_padding = this.mget('legend_padding');
+        h_range = this.plot_view.view_state.get('inner_range_horizontal');
+        v_range = this.plot_view.view_state.get('inner_range_vertical');
+        if (orientation === "top_right") {
+          x = h_range.get('end') - legend_padding - this.legend_width;
+          y = v_range.get('end') - legend_padding;
+        } else if (orientation === "top_left") {
+          x = h_range.get('start') + legend_padding;
+          y = v_range.get('end') - legend_padding;
+        } else if (orientation === "bottom_left") {
+          x = h_range.get('start') + legend_padding;
+          y = v_range.get('start') + legend_padding + this.legend_height;
+        } else if (orientation === "bottom_right") {
+          x = h_range.get('end') - legend_padding - this.legend_width;
+          y = v_range.get('start') + legend_padding + this.legend_height;
+        } else if (orientation === "absolute") {
+          _ref1 = this.absolute_coords, x = _ref1[0], y = _ref1[1];
         }
-        this.have_new_data = false;
-        return ctx.restore();
+        x = this.plot_view.view_state.vx_to_sx(x);
+        y = this.plot_view.view_state.vy_to_sy(y);
+        return this.box_coords = [x, y];
       };
 
-      GlyphView.prototype.xrange = function() {
-        return this.plot_view.x_range;
-      };
-
-      GlyphView.prototype.yrange = function() {
-        return this.plot_view.y_range;
-      };
-
-      GlyphView.prototype.bind_bokeh_events = function() {
-        this.listenTo(this.model, 'change', this.request_render);
-        return this.listenTo(this.mget_obj('data_source'), 'change', this.set_data);
-      };
-
-      GlyphView.prototype.distance = function(data, pt, span, position) {
-        var d, halfspan, i, mapper, pt0, pt1, pt_units, ptc, span_units, spt0, spt1;
-        pt_units = this.glyph_props[pt].units;
-        span_units = this.glyph_props[span].units;
-        if (pt === 'x') {
-          mapper = this.plot_view.xmapper;
-        } else if (pt === 'y') {
-          mapper = this.plot_view.ymapper;
-        }
-        span = this.glyph_props.v_select(span, data);
-        if (span_units === 'screen') {
-          return span;
-        }
-        if (position === 'center') {
-          halfspan = (function() {
-            var _i, _len, _results;
-            _results = [];
-            for (_i = 0, _len = span.length; _i < _len; _i++) {
-              d = span[_i];
-              _results.push(d / 2);
-            }
-            return _results;
-          })();
-          ptc = this.glyph_props.v_select(pt, data);
-          if (pt_units === 'screen') {
-            ptc = mapper.v_map_from_target(ptc);
-          }
-          pt0 = (function() {
-            var _i, _ref1, _results;
-            _results = [];
-            for (i = _i = 0, _ref1 = ptc.length; 0 <= _ref1 ? _i < _ref1 : _i > _ref1; i = 0 <= _ref1 ? ++_i : --_i) {
-              _results.push(ptc[i] - halfspan[i]);
-            }
-            return _results;
-          })();
-          pt1 = (function() {
-            var _i, _ref1, _results;
-            _results = [];
-            for (i = _i = 0, _ref1 = ptc.length; 0 <= _ref1 ? _i < _ref1 : _i > _ref1; i = 0 <= _ref1 ? ++_i : --_i) {
-              _results.push(ptc[i] + halfspan[i]);
-            }
-            return _results;
-          })();
-        } else {
-          pt0 = this.glyph_props.v_select(pt, data);
-          if (pt_units === 'screen') {
-            pt0 = mapper.v_map_from_target(pt0);
-          }
-          pt1 = (function() {
-            var _i, _ref1, _results;
-            _results = [];
-            for (i = _i = 0, _ref1 = pt0.length; 0 <= _ref1 ? _i < _ref1 : _i > _ref1; i = 0 <= _ref1 ? ++_i : --_i) {
-              _results.push(pt0[i] + span[i]);
-            }
-            return _results;
-          })();
-        }
-        spt0 = mapper.v_map_to_target(pt0);
-        spt1 = mapper.v_map_to_target(pt1);
-        return (function() {
-          var _i, _ref1, _results;
-          _results = [];
-          for (i = _i = 0, _ref1 = spt0.length; 0 <= _ref1 ? _i < _ref1 : _i > _ref1; i = 0 <= _ref1 ? ++_i : --_i) {
-            _results.push(Math.abs(spt1[i] - spt0[i]));
-          }
-          return _results;
-        })();
-      };
-
-      GlyphView.prototype.distance_vector = function(pt, span_prop_name, position) {
-        " returns an array ";
-        var d, halfspan, i, local_select, mapper, pt0, pt1, pt_units, ptc, source, span, span_units, spt0, spt1,
-          _this = this;
-        pt_units = this.glyph_props[pt].units;
-        span_units = this.glyph_props[span_prop_name].units;
-        if (pt === 'x') {
-          mapper = this.plot_view.xmapper;
-        } else if (pt === 'y') {
-          mapper = this.plot_view.ymapper;
-        }
-        source = this.mget_obj('data_source');
-        local_select = function(prop_name) {
-          if (source.type === 'ColumnDataSource') {
-            return _this.glyph_props.source_v_select(prop_name, source);
-          } else {
-            return _this.glyph_props.v_select(prop_name, _this.data2);
-          }
-        };
-        span = local_select(span_prop_name);
-        if (span_units === 'screen') {
-          return span;
-        }
-        if (position === 'center') {
-          halfspan = (function() {
-            var _i, _len, _results;
-            _results = [];
-            for (_i = 0, _len = span.length; _i < _len; _i++) {
-              d = span[_i];
-              _results.push(d / 2);
-            }
-            return _results;
-          })();
-          ptc = local_select(pt);
-          if (pt_units === 'screen') {
-            ptc = mapper.v_map_from_target(ptc);
-          }
-          pt0 = (function() {
-            var _i, _ref1, _results;
-            _results = [];
-            for (i = _i = 0, _ref1 = ptc.length; 0 <= _ref1 ? _i < _ref1 : _i > _ref1; i = 0 <= _ref1 ? ++_i : --_i) {
-              _results.push(ptc[i] - halfspan[i]);
-            }
-            return _results;
-          })();
-          pt1 = (function() {
-            var _i, _ref1, _results;
-            _results = [];
-            for (i = _i = 0, _ref1 = ptc.length; 0 <= _ref1 ? _i < _ref1 : _i > _ref1; i = 0 <= _ref1 ? ++_i : --_i) {
-              _results.push(ptc[i] + halfspan[i]);
-            }
-            return _results;
-          })();
-        } else {
-          pt0 = local_select(pt);
-          if (pt_units === 'screen') {
-            pt0 = mapper.v_map_from_target(pt0);
-          }
-          pt1 = (function() {
-            var _i, _ref1, _results;
-            _results = [];
-            for (i = _i = 0, _ref1 = pt0.length; 0 <= _ref1 ? _i < _ref1 : _i > _ref1; i = 0 <= _ref1 ? ++_i : --_i) {
-              _results.push(pt0[i] + span[i]);
-            }
-            return _results;
-          })();
-        }
-        spt0 = mapper.v_map_to_target(pt0);
-        spt1 = mapper.v_map_to_target(pt1);
-        return (function() {
-          var _i, _ref1, _results;
-          _results = [];
-          for (i = _i = 0, _ref1 = spt0.length; 0 <= _ref1 ? _i < _ref1 : _i > _ref1; i = 0 <= _ref1 ? ++_i : --_i) {
-            _results.push(Math.abs(spt1[i] - spt0[i]));
-          }
-          return _results;
-        })();
-      };
-
-      GlyphView.prototype.get_reference_point = function() {
-        var reference_point;
-        reference_point = this.mget('reference_point');
-        if (_.isNumber(reference_point)) {
-          return this.data[reference_point];
-        } else {
-          return reference_point;
-        }
-      };
-
-      GlyphView.prototype.draw_legend = function(ctx, x0, x1, y0, y1) {
-        return null;
-      };
-
-      GlyphView.prototype._generic_line_legend = function(ctx, x0, x1, y0, y1) {
-        var line_props, reference_point, _ref1;
-        reference_point = (_ref1 = this.get_reference_point()) != null ? _ref1 : 0;
-        line_props = this.glyph_props.line_properties;
+      LegendView.prototype.render = function() {
+        var ctx, idx, legend_name, legend_spacing, renderer, view, x, x1, x2, y, y1, y2, yoffset, yspacing, _i, _j, _len, _len1, _ref1, _ref2;
+        ctx = this.plot_view.ctx;
         ctx.save();
+        ctx.fillStyle = this.plot_model.get('background_fill');
+        this.border_props.set(ctx, this);
         ctx.beginPath();
-        ctx.moveTo(x0, (y0 + y1) / 2);
-        ctx.lineTo(x1, (y0 + y1) / 2);
-        if (line_props.do_stroke) {
-          line_props.set_vectorize(ctx, reference_point);
-          ctx.stroke();
+        ctx.rect(this.box_coords[0], this.box_coords[1], this.legend_width, this.legend_height);
+        ctx.fill();
+        ctx.stroke();
+        legend_spacing = this.mget('legend_spacing');
+        _ref1 = this.legend_names;
+        for (idx = _i = 0, _len = _ref1.length; _i < _len; idx = ++_i) {
+          legend_name = _ref1[idx];
+          yoffset = idx * this.label_height;
+          yspacing = (1 + idx) * legend_spacing;
+          y = this.box_coords[1] + this.label_height / 2.0 + yoffset + yspacing;
+          x = this.box_coords[0] + legend_spacing;
+          x1 = this.box_coords[0] + 2 * legend_spacing + this.label_width;
+          x2 = x1 + this.glyph_width;
+          y1 = this.box_coords[1] + yoffset + yspacing;
+          y2 = y1 + this.glyph_height;
+          this.label_props.set(ctx, this);
+          ctx.fillText(legend_name, x, y);
+          _ref2 = this.model.resolve_ref(this.legends[legend_name]);
+          for (_j = 0, _len1 = _ref2.length; _j < _len1; _j++) {
+            renderer = _ref2[_j];
+            view = this.plot_view.renderers[renderer.id];
+            view.draw_legend(ctx, x1, x2, y1, y2);
+          }
         }
         return ctx.restore();
       };
 
-      GlyphView.prototype._generic_area_legend = function(ctx, x0, x1, y0, y1) {
-        var dh, dw, h, indices, reference_point, sx0, sx1, sy0, sy1, w, _ref1;
-        reference_point = (_ref1 = this.get_reference_point()) != null ? _ref1 : 0;
-        indices = [reference_point];
-        w = Math.abs(x1 - x0);
-        dw = w * 0.1;
-        h = Math.abs(y1 - y0);
-        dh = h * 0.1;
-        sx0 = x0 + dw;
-        sx1 = x1 - dw;
-        sy0 = y0 + dh;
-        sy1 = y1 - dh;
-        if (this.glyph_props.fill_properties.do_fill) {
-          this.glyph_props.fill_properties.set_vectorize(ctx, reference_point);
-          ctx.fillRect(sx0, sy0, sx1 - sx0, sy1 - sy0);
-        }
-        if (this.glyph_props.line_properties.do_stroke) {
-          ctx.beginPath();
-          ctx.rect(sx0, sy0, sx1 - sx0, sy1 - sy0);
-          this.glyph_props.line_properties.set_vectorize(ctx, reference_point);
-          return ctx.stroke();
-        }
-      };
-
-      GlyphView.prototype.hit_test = function(geometry) {
-        if (geometry.type === "point") {
-          if (this._hit_point != null) {
-            return this._hit_point(geometry);
-          }
-          return console.log("'point' selection not available on renderer");
-        } else if (geometry.type === "rect") {
-          if (this._hit_rect != null) {
-            return this._hit_rect(geometry);
-          }
-          return console.log("'rect' seletion not avaliable on renderer");
-        } else {
-          console.log("unrecognized selection geometry type '" + geometry.type + "'");
-          return [];
-        }
-      };
-
-      return GlyphView;
+      return LegendView;
 
     })(PlotWidget);
-    Glyph = (function(_super) {
-      __extends(Glyph, _super);
+    Legend = (function(_super) {
+      __extends(Legend, _super);
 
-      function Glyph() {
-        _ref1 = Glyph.__super__.constructor.apply(this, arguments);
+      function Legend() {
+        _ref1 = Legend.__super__.constructor.apply(this, arguments);
         return _ref1;
       }
 
-      Glyph.prototype.defaults = function() {
+      Legend.prototype.default_view = LegendView;
+
+      Legend.prototype.type = 'Legend';
+
+      Legend.prototype.display_defaults = function() {
         return {
-          data_source: null
+          level: 'overlay',
+          border_line_color: 'black',
+          border_line_width: 1,
+          border_line_alpha: 1.0,
+          border_line_join: 'miter',
+          border_line_cap: 'butt',
+          border_line_dash: [],
+          border_line_dash_offset: 0,
+          label_standoff: 15,
+          label_text_font: "helvetica",
+          label_text_font_size: "10pt",
+          label_text_font_style: "normal",
+          label_text_color: "#444444",
+          label_text_alpha: 1.0,
+          label_text_align: "left",
+          label_text_baseline: "middle",
+          glyph_height: 20,
+          glyph_width: 20,
+          label_height: 20,
+          label_width: 50,
+          legend_padding: 10,
+          legend_spacing: 3,
+          orientation: "top_right",
+          datapoint: null
         };
       };
 
-      Glyph.prototype.display_defaults = function() {
-        return {
-          level: 'glyph',
-          radius_units: 'screen',
-          length_units: 'screen',
-          angle_units: 'deg',
-          start_angle_units: 'deg',
-          end_angle_units: 'deg'
-        };
-      };
-
-      return Glyph;
+      return Legend;
 
     })(HasParent);
+    Legends = (function(_super) {
+      __extends(Legends, _super);
+
+      function Legends() {
+        _ref2 = Legends.__super__.constructor.apply(this, arguments);
+        return _ref2;
+      }
+
+      Legends.prototype.model = Legend;
+
+      return Legends;
+
+    })(Backbone.Collection);
     return {
-      "Model": Glyph,
-      "View": GlyphView
+      "Model": Legend,
+      "Collection": new Legends(),
+      "View": LegendView
     };
   });
 
 }).call(this);
 
 /*
-//@ sourceMappingURL=glyph.js.map
-*/;
-(function() {
-  var __hasProp = {}.hasOwnProperty,
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
-
-  define('renderer/glyph/annular_wedge',["underscore", "renderer/properties", "./glyph"], function(_, Properties, Glyph) {
-    var AnnularWedge, AnnularWedgeView, _ref, _ref1;
-    AnnularWedgeView = (function(_super) {
-      __extends(AnnularWedgeView, _super);
-
-      function AnnularWedgeView() {
-        _ref = AnnularWedgeView.__super__.constructor.apply(this, arguments);
-        return _ref;
-      }
-
-      AnnularWedgeView.prototype._fields = ['x', 'y', 'inner_radius', 'outer_radius', 'start_angle', 'end_angle', 'direction:string'];
-
-      AnnularWedgeView.prototype._properties = ['line', 'fill'];
-
-      AnnularWedgeView.prototype._map_data = function() {
-        var i, _i, _ref1, _ref2, _results;
-        _ref1 = this.plot_view.map_to_screen(this.x, this.glyph_props.x.units, this.y, this.glyph_props.y.units), this.sx = _ref1[0], this.sy = _ref1[1];
-        this.inner_radius = this.distance_vector('x', 'inner_radius', 'edge');
-        this.outer_radius = this.distance_vector('x', 'outer_radius', 'edge');
-        this.angle = new Float32Array(this.start_angle.length);
-        _results = [];
-        for (i = _i = 0, _ref2 = this.start_angle.length; 0 <= _ref2 ? _i < _ref2 : _i > _ref2; i = 0 <= _ref2 ? ++_i : --_i) {
-          _results.push(this.angle[i] = this.end_angle[i] - this.start_angle[i]);
-        }
-        return _results;
-      };
-
-      AnnularWedgeView.prototype._render = function(ctx, indices, glyph_props, sx, sy, inner_radius, outer_radius) {
-        var i, _i, _len, _results;
-        if (sx == null) {
-          sx = this.sx;
-        }
-        if (sy == null) {
-          sy = this.sy;
-        }
-        if (inner_radius == null) {
-          inner_radius = this.inner_radius;
-        }
-        if (outer_radius == null) {
-          outer_radius = this.outer_radius;
-        }
-        _results = [];
-        for (_i = 0, _len = indices.length; _i < _len; _i++) {
-          i = indices[_i];
-          if (isNaN(sx[i] + sy[i] + inner_radius[i] + outer_radius[i] + this.start_angle[i] + this.angle[i])) {
-            continue;
-          }
-          ctx.translate(sx[i], sy[i]);
-          ctx.rotate(this.start_angle[i]);
-          ctx.moveTo(outer_radius[i], 0);
-          ctx.beginPath();
-          ctx.arc(0, 0, outer_radius[i], 0, this.angle[i], this.direction[i]);
-          ctx.rotate(this.angle[i]);
-          ctx.lineTo(inner_radius[i], 0);
-          ctx.arc(0, 0, inner_radius[i], 0, -this.angle[i], !this.direction[i]);
-          ctx.closePath();
-          ctx.rotate(-this.angle[i] - this.start_angle[i]);
-          ctx.translate(-sx[i], -sy[i]);
-          if (glyph_props.fill_properties.do_fill) {
-            glyph_props.fill_properties.set_vectorize(ctx, i);
-            ctx.fill();
-          }
-          if (glyph_props.line_properties.do_stroke) {
-            glyph_props.line_properties.set_vectorize(ctx, i);
-            _results.push(ctx.stroke());
-          } else {
-            _results.push(void 0);
-          }
-        }
-        return _results;
-      };
-
-      AnnularWedgeView.prototype.draw_legend = function(ctx, x0, x1, y0, y1) {
-        var indices, inner_radius, outer_radius, r, reference_point, sx, sy, _ref1;
-        reference_point = (_ref1 = this.get_reference_point()) != null ? _ref1 : 0;
-        indices = [reference_point];
-        sx = {};
-        sx[reference_point] = (x0 + x1) / 2;
-        sy = {};
-        sy[reference_point] = (y0 + y1) / 2;
-        r = Math.min(Math.abs(x1 - x0), Math.abs(y1 - y0)) * 0.5;
-        inner_radius = {};
-        inner_radius[reference_point] = r * 0.25;
-        outer_radius = {};
-        outer_radius[reference_point] = r * 0.8;
-        return this._render(ctx, indices, this.glyph_props, sx, sy, inner_radius, outer_radius);
-      };
-
-      return AnnularWedgeView;
-
-    })(Glyph.View);
-    AnnularWedge = (function(_super) {
-      __extends(AnnularWedge, _super);
-
-      function AnnularWedge() {
-        _ref1 = AnnularWedge.__super__.constructor.apply(this, arguments);
-        return _ref1;
-      }
-
-      AnnularWedge.prototype.default_view = AnnularWedgeView;
-
-      AnnularWedge.prototype.type = 'Glyph';
-
-      AnnularWedge.prototype.display_defaults = function() {
-        return _.extend(AnnularWedge.__super__.display_defaults.call(this), {
-          direction: 'anticlock',
-          fill_color: 'gray',
-          fill_alpha: 1.0,
-          line_color: 'red',
-          line_width: 1,
-          line_alpha: 1.0,
-          line_join: 'miter',
-          line_cap: 'butt',
-          line_dash: [],
-          line_dash_offset: 0
-        });
-      };
-
-      return AnnularWedge;
-
-    })(Glyph.Model);
-    return {
-      "Model": AnnularWedge,
-      "View": AnnularWedgeView
-    };
-  });
-
-}).call(this);
-
-/*
-//@ sourceMappingURL=annular_wedge.js.map
-*/;
-(function() {
-  var __hasProp = {}.hasOwnProperty,
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
-
-  define('renderer/glyph/annulus',["underscore", "renderer/properties", "./glyph"], function(_, Properties, Glyph) {
-    var Annulus, AnnulusView, _ref, _ref1;
-    AnnulusView = (function(_super) {
-      __extends(AnnulusView, _super);
-
-      function AnnulusView() {
-        _ref = AnnulusView.__super__.constructor.apply(this, arguments);
-        return _ref;
-      }
-
-      AnnulusView.prototype._fields = ['x', 'y', 'inner_radius', 'outer_radius'];
-
-      AnnulusView.prototype._properties = ['line', 'fill'];
-
-      AnnulusView.prototype._map_data = function() {
-        var _ref1;
-        _ref1 = this.plot_view.map_to_screen(this.x, this.glyph_props.x.units, this.y, this.glyph_props.y.units), this.sx = _ref1[0], this.sy = _ref1[1];
-        this.inner_radius = this.distance_vector('x', 'inner_radius', 'edge');
-        return this.outer_radius = this.distance_vector('x', 'outer_radius', 'edge');
-      };
-
-      AnnulusView.prototype._render = function(ctx, indices, glyph_props, sx, sy, inner_radius, outer_radius) {
-        var i, _i, _len, _results;
-        if (sx == null) {
-          sx = this.sx;
-        }
-        if (sy == null) {
-          sy = this.sy;
-        }
-        if (inner_radius == null) {
-          inner_radius = this.inner_radius;
-        }
-        if (outer_radius == null) {
-          outer_radius = this.outer_radius;
-        }
-        _results = [];
-        for (_i = 0, _len = indices.length; _i < _len; _i++) {
-          i = indices[_i];
-          if (isNaN(sx[i] + sy[i] + inner_radius[i] + outer_radius[i])) {
-            continue;
-          }
-          ctx.beginPath();
-          ctx.arc(sx[i], sy[i], inner_radius[i], 0, 2 * Math.PI * 2, false);
-          ctx.moveTo(sx[i] + outer_radius[i], sy[i]);
-          ctx.arc(sx[i], sy[i], outer_radius[i], 0, 2 * Math.PI * 2, true);
-          if (glyph_props.fill_properties.do_fill) {
-            glyph_props.fill_properties.set_vectorize(ctx, i);
-            ctx.fill();
-          }
-          if (glyph_props.line_properties.do_stroke) {
-            glyph_props.line_properties.set_vectorize(ctx, i);
-            _results.push(ctx.stroke());
-          } else {
-            _results.push(void 0);
-          }
-        }
-        return _results;
-      };
-
-      AnnulusView.prototype.draw_legend = function(ctx, x0, x1, y0, y1) {
-        var indices, inner_radius, outer_radius, r, reference_point, sx, sy, _ref1;
-        reference_point = (_ref1 = this.get_reference_point()) != null ? _ref1 : 0;
-        indices = [reference_point];
-        sx = {};
-        sx[reference_point] = (x0 + x1) / 2;
-        sy = {};
-        sy[reference_point] = (y0 + y1) / 2;
-        r = Math.min(Math.abs(x1 - x0), Math.abs(y1 - y0)) * 0.5;
-        inner_radius = {};
-        inner_radius[reference_point] = r * 0.4;
-        outer_radius = {};
-        outer_radius[reference_point] = r * 0.8;
-        return this._render(ctx, indices, this.glyph_props, sx, sy, inner_radius, outer_radius);
-      };
-
-      return AnnulusView;
-
-    })(Glyph.View);
-    Annulus = (function(_super) {
-      __extends(Annulus, _super);
-
-      function Annulus() {
-        _ref1 = Annulus.__super__.constructor.apply(this, arguments);
-        return _ref1;
-      }
-
-      Annulus.prototype.default_view = AnnulusView;
-
-      Annulus.prototype.type = 'Glyph';
-
-      Annulus.prototype.display_defaults = function() {
-        return _.extend(Annulus.__super__.display_defaults.call(this), {
-          fill_color: 'gray',
-          fill_alpha: 1.0,
-          line_color: 'red',
-          line_width: 1,
-          line_alpha: 1.0,
-          line_join: 'miter',
-          line_cap: 'butt',
-          line_dash: [],
-          line_dash_offset: 0
-        });
-      };
-
-      return Annulus;
-
-    })(Glyph.Model);
-    return {
-      "Model": Annulus,
-      "View": AnnulusView
-    };
-  });
-
-}).call(this);
-
-/*
-//@ sourceMappingURL=annulus.js.map
-*/;
-(function() {
-  var __hasProp = {}.hasOwnProperty,
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
-
-  define('renderer/glyph/arc',["underscore", "renderer/properties", "./glyph"], function(_, Properties, Glyph) {
-    var Arc, ArcView, _ref, _ref1;
-    ArcView = (function(_super) {
-      __extends(ArcView, _super);
-
-      function ArcView() {
-        _ref = ArcView.__super__.constructor.apply(this, arguments);
-        return _ref;
-      }
-
-      ArcView.prototype._fields = ['x', 'y', 'radius', 'start_angle', 'end_angle', 'direction:string'];
-
-      ArcView.prototype._properties = ['line'];
-
-      ArcView.prototype._map_data = function() {
-        var _ref1;
-        _ref1 = this.plot_view.map_to_screen(this.x, this.glyph_props.x.units, this.y, this.glyph_props.y.units), this.sx = _ref1[0], this.sy = _ref1[1];
-        return this.radius = this.distance_vector('x', 'radius', 'edge');
-      };
-
-      ArcView.prototype._render = function(ctx, indices, glyph_props, sx, sy, radius) {
-        var i, _i, _len, _results;
-        if (sx == null) {
-          sx = this.sx;
-        }
-        if (sy == null) {
-          sy = this.sy;
-        }
-        if (radius == null) {
-          radius = this.radius;
-        }
-        if (glyph_props.line_properties.do_stroke) {
-          _results = [];
-          for (_i = 0, _len = indices.length; _i < _len; _i++) {
-            i = indices[_i];
-            if (isNaN(sx[i] + sy[i] + radius[i] + this.start_angle[i] + this.end_angle[i] + this.direction[i])) {
-              continue;
-            }
-            ctx.beginPath();
-            ctx.arc(sx[i], sy[i], radius[i], -this.start_angle[i], -this.end_angle[i], this.direction[i]);
-            glyph_props.line_properties.set_vectorize(ctx, i);
-            _results.push(ctx.stroke());
-          }
-          return _results;
-        }
-      };
-
-      ArcView.prototype.draw_legend = function(ctx, x0, x1, y0, y1) {
-        var indices, radius, reference_point, sx, sy, _ref1;
-        reference_point = (_ref1 = this.get_reference_point()) != null ? _ref1 : 0;
-        indices = [reference_point];
-        sx = {};
-        sx[reference_point] = (x0 + x1) / 2;
-        sy = {};
-        sy[reference_point] = (y0 + y1) / 2;
-        radius = {};
-        radius[reference_point] = Math.min(Math.abs(x1 - x0), Math.abs(y1 - y0)) * 0.4;
-        return this._render(ctx, indices, this.glyph_props, sx, sy, radius);
-      };
-
-      return ArcView;
-
-    })(Glyph.View);
-    Arc = (function(_super) {
-      __extends(Arc, _super);
-
-      function Arc() {
-        _ref1 = Arc.__super__.constructor.apply(this, arguments);
-        return _ref1;
-      }
-
-      Arc.prototype.default_view = ArcView;
-
-      Arc.prototype.type = 'Glyph';
-
-      Arc.prototype.display_defaults = function() {
-        return _.extend(Arc.__super__.display_defaults.call(this), {
-          direction: 'anticlock',
-          line_color: 'red',
-          line_width: 1,
-          line_alpha: 1.0,
-          line_join: 'miter',
-          line_cap: 'butt',
-          line_dash: [],
-          line_dash_offset: 0
-        });
-      };
-
-      return Arc;
-
-    })(Glyph.Model);
-    return {
-      "Model": Arc,
-      "View": ArcView
-    };
-  });
-
-}).call(this);
-
-/*
-//@ sourceMappingURL=arc.js.map
+//@ sourceMappingURL=legend.js.map
 */;
 /*
  (c) 2013, Vladimir Agafonkin
@@ -17239,6 +16796,1086 @@ if (typeof define === 'function' && define.amd) {
 })();
 
 (function() {
+  define('common/mathutils',[], function() {
+    var angle_between, angle_dist, angle_norm;
+    angle_norm = function(angle) {
+      while (angle < 0) {
+        angle += 2 * Math.PI;
+      }
+      while (angle > 2 * Math.PI) {
+        ngle -= 2 * Math.PI;
+      }
+      return angle;
+    };
+    angle_dist = function(lhs, rhs) {
+      var a;
+      a = angle_norm(lhs) - angle_norm(rhs);
+      return Math.abs(angle_norm(a + Math.PI) - Math.PI);
+    };
+    angle_between = function(mid, lhs, rhs, direction) {
+      var d;
+      d = angle_dist(lhs, rhs);
+      if (direction === "anticlock") {
+        return angle_dist(lhs, mid) <= d && angle_dist(mid, rhs) <= d;
+      } else {
+        return !(angle_dist(lhs, mid) <= d && angle_dist(mid, rhs) <= d);
+      }
+    };
+    return {
+      "angle_norm": angle_norm,
+      "angle_dist": angle_dist,
+      "angle_between": angle_between
+    };
+  });
+
+}).call(this);
+
+/*
+//@ sourceMappingURL=mathutils.js.map
+*/;
+(function() {
+  var __hasProp = {}.hasOwnProperty,
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; },
+    __indexOf = [].indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; };
+
+  define('renderer/glyph/glyph',["underscore", "common/has_parent", "common/plot_widget", "renderer/properties"], function(_, HasParent, PlotWidget, Properties) {
+    var Glyph, GlyphView, _ref, _ref1;
+    GlyphView = (function(_super) {
+      __extends(GlyphView, _super);
+
+      function GlyphView() {
+        _ref = GlyphView.__super__.constructor.apply(this, arguments);
+        return _ref;
+      }
+
+      GlyphView.prototype.initialize = function(options) {
+        var spec;
+        GlyphView.__super__.initialize.call(this, options);
+        this.need_set_data = true;
+        this.glyph_props = this.init_glyph(this.mget('glyphspec'));
+        this.have_selection_props = false;
+        if (this.mget('selection_glyphspec')) {
+          spec = _.extend({}, this.mget('glyphspec'), this.mget('selection_glyphspec'));
+          this.selection_glyphprops = this.init_glyph(spec);
+          this.have_selection_props = true;
+        } else {
+          this.selection_glyphprops = this.glyph_props;
+        }
+        if (this.mget('nonselection_glyphspec')) {
+          spec = _.extend({}, this.mget('glyphspec'), this.mget('nonselection_glyphspec'));
+          this.nonselection_glyphprops = this.init_glyph(spec);
+          return this.have_selection_props = true;
+        } else {
+          return this.nonselection_glyphprops = this.glyph_props;
+        }
+      };
+
+      GlyphView.prototype.init_glyph = function(glyphspec) {
+        var glyph_props, props;
+        props = {};
+        if (__indexOf.call(this._properties, 'line') >= 0) {
+          props['line_properties'] = new Properties.line_properties(this, glyphspec);
+        }
+        if (__indexOf.call(this._properties, 'fill') >= 0) {
+          props['fill_properties'] = new Properties.fill_properties(this, glyphspec);
+        }
+        if (__indexOf.call(this._properties, 'text') >= 0) {
+          props['text_properties'] = new Properties.text_properties(this, glyphspec);
+        }
+        glyph_props = new Properties.glyph_properties(this, glyphspec, this._fields, props);
+        return glyph_props;
+      };
+
+      GlyphView.prototype.set_data = function(request_render) {
+        var dir, field, i, junk, len, source, values, x, _i, _j, _k, _len, _ref1, _ref2, _ref3, _results;
+        if (request_render == null) {
+          request_render = true;
+        }
+        source = this.mget_obj('data_source');
+        _ref1 = this._fields;
+        for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+          field = _ref1[_i];
+          if (field.indexOf(":") > -1) {
+            _ref2 = field.split(":"), field = _ref2[0], junk = _ref2[1];
+          }
+          this[field] = this.glyph_props.source_v_select(field, source);
+          if (field === "direction") {
+            values = new Uint8Array(this.direction.length);
+            for (i = _j = 0, _ref3 = this.direction.length; 0 <= _ref3 ? _j < _ref3 : _j > _ref3; i = 0 <= _ref3 ? ++_j : --_j) {
+              dir = this.direction[i];
+              if (dir === 'clock') {
+                values[i] = false;
+              } else if (dir === 'anticlock') {
+                values[i] = true;
+              } else {
+                values = NaN;
+              }
+            }
+            this.direction = values;
+          }
+          if (field.indexOf("angle") > -1) {
+            this[field] = (function() {
+              var _k, _len1, _ref4, _results;
+              _ref4 = this[field];
+              _results = [];
+              for (_k = 0, _len1 = _ref4.length; _k < _len1; _k++) {
+                x = _ref4[_k];
+                _results.push(-x);
+              }
+              return _results;
+            }).call(this);
+          }
+        }
+        if (this._set_data != null) {
+          this._set_data();
+        }
+        len = this[field].length;
+        this.all_indices = (function() {
+          _results = [];
+          for (var _k = 0; 0 <= len ? _k < len : _k > len; 0 <= len ? _k++ : _k--){ _results.push(_k); }
+          return _results;
+        }).apply(this);
+        this.have_new_data = true;
+        if (request_render) {
+          return this.request_render();
+        }
+      };
+
+      GlyphView.prototype.render = function(have_new_mapper_state) {
+        var ctx, do_render, i, idx, indices, nonselected, selected, selected_mask, _i, _j, _len, _len1,
+          _this = this;
+        if (have_new_mapper_state == null) {
+          have_new_mapper_state = true;
+        }
+        if (this.need_set_data) {
+          this.set_data(false);
+          this.need_set_data = false;
+        }
+        this._map_data();
+        if ((this._mask_data != null) && (this.plot_view.x_range.type !== "FactorRange") && (this.plot_view.y_range.type !== "FactorRange")) {
+          indices = this._mask_data();
+        } else {
+          indices = this.all_indices;
+        }
+        ctx = this.plot_view.ctx;
+        ctx.save();
+        do_render = function(ctx, indices, glyph_props) {
+          var source;
+          source = _this.mget_obj('data_source');
+          if (_this.have_new_data) {
+            if ((glyph_props.fill_properties != null) && glyph_props.fill_properties.do_fill) {
+              glyph_props.fill_properties.set_prop_cache(source);
+            }
+            if ((glyph_props.line_properties != null) && glyph_props.line_properties.do_stroke) {
+              glyph_props.line_properties.set_prop_cache(source);
+            }
+            if (glyph_props.text_properties != null) {
+              glyph_props.text_properties.set_prop_cache(source);
+            }
+          }
+          return _this._render(ctx, indices, glyph_props);
+        };
+        selected = this.mget_obj('data_source').get('selected');
+        if (selected && selected.length && this.have_selection_props) {
+          selected_mask = (function() {
+            var _i, _len, _ref1, _results;
+            _ref1 = this.all_indices;
+            _results = [];
+            for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+              i = _ref1[_i];
+              _results.push(false);
+            }
+            return _results;
+          }).call(this);
+          for (_i = 0, _len = selected.length; _i < _len; _i++) {
+            idx = selected[_i];
+            selected_mask[idx] = true;
+          }
+          selected = new Array();
+          nonselected = new Array();
+          for (_j = 0, _len1 = indices.length; _j < _len1; _j++) {
+            i = indices[_j];
+            if (selected_mask[i]) {
+              selected.push(i);
+            } else {
+              nonselected.push(i);
+            }
+          }
+          do_render(ctx, selected, this.selection_glyphprops);
+          do_render(ctx, nonselected, this.nonselection_glyphprops);
+        } else {
+          do_render(ctx, indices, this.glyph_props);
+        }
+        this.have_new_data = false;
+        return ctx.restore();
+      };
+
+      GlyphView.prototype.xrange = function() {
+        return this.plot_view.x_range;
+      };
+
+      GlyphView.prototype.yrange = function() {
+        return this.plot_view.y_range;
+      };
+
+      GlyphView.prototype.bind_bokeh_events = function() {
+        this.listenTo(this.model, 'change', this.request_render);
+        return this.listenTo(this.mget_obj('data_source'), 'change', this.set_data);
+      };
+
+      GlyphView.prototype.distance = function(data, pt, span, position) {
+        var d, halfspan, i, mapper, pt0, pt1, pt_units, ptc, span_units, spt0, spt1;
+        pt_units = this.glyph_props[pt].units;
+        span_units = this.glyph_props[span].units;
+        if (pt === 'x') {
+          mapper = this.plot_view.xmapper;
+        } else if (pt === 'y') {
+          mapper = this.plot_view.ymapper;
+        }
+        span = this.glyph_props.v_select(span, data);
+        if (span_units === 'screen') {
+          return span;
+        }
+        if (position === 'center') {
+          halfspan = (function() {
+            var _i, _len, _results;
+            _results = [];
+            for (_i = 0, _len = span.length; _i < _len; _i++) {
+              d = span[_i];
+              _results.push(d / 2);
+            }
+            return _results;
+          })();
+          ptc = this.glyph_props.v_select(pt, data);
+          if (pt_units === 'screen') {
+            ptc = mapper.v_map_from_target(ptc);
+          }
+          if (typeof ptc === 'string') {
+            ptc = mapper.v_map_to_target(ptc);
+          }
+          pt0 = (function() {
+            var _i, _ref1, _results;
+            _results = [];
+            for (i = _i = 0, _ref1 = ptc.length; 0 <= _ref1 ? _i < _ref1 : _i > _ref1; i = 0 <= _ref1 ? ++_i : --_i) {
+              _results.push(ptc[i] - halfspan[i]);
+            }
+            return _results;
+          })();
+          pt1 = (function() {
+            var _i, _ref1, _results;
+            _results = [];
+            for (i = _i = 0, _ref1 = ptc.length; 0 <= _ref1 ? _i < _ref1 : _i > _ref1; i = 0 <= _ref1 ? ++_i : --_i) {
+              _results.push(ptc[i] + halfspan[i]);
+            }
+            return _results;
+          })();
+        } else {
+          pt0 = this.glyph_props.v_select(pt, data);
+          if (pt_units === 'screen') {
+            pt0 = mapper.v_map_from_target(pt0);
+          }
+          pt1 = (function() {
+            var _i, _ref1, _results;
+            _results = [];
+            for (i = _i = 0, _ref1 = pt0.length; 0 <= _ref1 ? _i < _ref1 : _i > _ref1; i = 0 <= _ref1 ? ++_i : --_i) {
+              _results.push(pt0[i] + span[i]);
+            }
+            return _results;
+          })();
+        }
+        spt0 = mapper.v_map_to_target(pt0);
+        spt1 = mapper.v_map_to_target(pt1);
+        return (function() {
+          var _i, _ref1, _results;
+          _results = [];
+          for (i = _i = 0, _ref1 = spt0.length; 0 <= _ref1 ? _i < _ref1 : _i > _ref1; i = 0 <= _ref1 ? ++_i : --_i) {
+            _results.push(Math.abs(spt1[i] - spt0[i]));
+          }
+          return _results;
+        })();
+      };
+
+      GlyphView.prototype.distance_vector = function(pt, span_prop_name, position) {
+        " returns an array ";
+        var d, halfspan, i, local_select, mapper, pt0, pt1, pt_units, ptc, source, span, span_units, spt0, spt1,
+          _this = this;
+        pt_units = this.glyph_props[pt].units;
+        span_units = this.glyph_props[span_prop_name].units;
+        if (pt === 'x') {
+          mapper = this.plot_view.xmapper;
+        } else if (pt === 'y') {
+          mapper = this.plot_view.ymapper;
+        }
+        source = this.mget_obj('data_source');
+        local_select = function(prop_name) {
+          return _this.glyph_props.source_v_select(prop_name, source);
+        };
+        span = local_select(span_prop_name);
+        if (span_units === 'screen') {
+          return span;
+        }
+        if (position === 'center') {
+          halfspan = (function() {
+            var _i, _len, _results;
+            _results = [];
+            for (_i = 0, _len = span.length; _i < _len; _i++) {
+              d = span[_i];
+              _results.push(d / 2);
+            }
+            return _results;
+          })();
+          ptc = local_select(pt);
+          if (pt_units === 'screen') {
+            ptc = mapper.v_map_from_target(ptc);
+          }
+          if (typeof ptc[0] === 'string') {
+            ptc = mapper.v_map_to_target(ptc);
+          }
+          pt0 = (function() {
+            var _i, _ref1, _results;
+            _results = [];
+            for (i = _i = 0, _ref1 = ptc.length; 0 <= _ref1 ? _i < _ref1 : _i > _ref1; i = 0 <= _ref1 ? ++_i : --_i) {
+              _results.push(ptc[i] - halfspan[i]);
+            }
+            return _results;
+          })();
+          pt1 = (function() {
+            var _i, _ref1, _results;
+            _results = [];
+            for (i = _i = 0, _ref1 = ptc.length; 0 <= _ref1 ? _i < _ref1 : _i > _ref1; i = 0 <= _ref1 ? ++_i : --_i) {
+              _results.push(ptc[i] + halfspan[i]);
+            }
+            return _results;
+          })();
+        } else {
+          pt0 = local_select(pt);
+          if (pt_units === 'screen') {
+            pt0 = mapper.v_map_from_target(pt0);
+          }
+          pt1 = (function() {
+            var _i, _ref1, _results;
+            _results = [];
+            for (i = _i = 0, _ref1 = pt0.length; 0 <= _ref1 ? _i < _ref1 : _i > _ref1; i = 0 <= _ref1 ? ++_i : --_i) {
+              _results.push(pt0[i] + span[i]);
+            }
+            return _results;
+          })();
+        }
+        spt0 = mapper.v_map_to_target(pt0);
+        spt1 = mapper.v_map_to_target(pt1);
+        return (function() {
+          var _i, _ref1, _results;
+          _results = [];
+          for (i = _i = 0, _ref1 = spt0.length; 0 <= _ref1 ? _i < _ref1 : _i > _ref1; i = 0 <= _ref1 ? ++_i : --_i) {
+            _results.push(Math.abs(spt1[i] - spt0[i]));
+          }
+          return _results;
+        })();
+      };
+
+      GlyphView.prototype.get_reference_point = function() {
+        var reference_point;
+        reference_point = this.mget('reference_point');
+        if (_.isNumber(reference_point)) {
+          return this.data[reference_point];
+        } else {
+          return reference_point;
+        }
+      };
+
+      GlyphView.prototype.draw_legend = function(ctx, x0, x1, y0, y1) {
+        return null;
+      };
+
+      GlyphView.prototype._generic_line_legend = function(ctx, x0, x1, y0, y1) {
+        var line_props, reference_point, _ref1;
+        reference_point = (_ref1 = this.get_reference_point()) != null ? _ref1 : 0;
+        line_props = this.glyph_props.line_properties;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(x0, (y0 + y1) / 2);
+        ctx.lineTo(x1, (y0 + y1) / 2);
+        if (line_props.do_stroke) {
+          line_props.set_vectorize(ctx, reference_point);
+          ctx.stroke();
+        }
+        return ctx.restore();
+      };
+
+      GlyphView.prototype._generic_area_legend = function(ctx, x0, x1, y0, y1) {
+        var dh, dw, h, indices, reference_point, sx0, sx1, sy0, sy1, w, _ref1;
+        reference_point = (_ref1 = this.get_reference_point()) != null ? _ref1 : 0;
+        indices = [reference_point];
+        w = Math.abs(x1 - x0);
+        dw = w * 0.1;
+        h = Math.abs(y1 - y0);
+        dh = h * 0.1;
+        sx0 = x0 + dw;
+        sx1 = x1 - dw;
+        sy0 = y0 + dh;
+        sy1 = y1 - dh;
+        if (this.glyph_props.fill_properties.do_fill) {
+          this.glyph_props.fill_properties.set_vectorize(ctx, reference_point);
+          ctx.fillRect(sx0, sy0, sx1 - sx0, sy1 - sy0);
+        }
+        if (this.glyph_props.line_properties.do_stroke) {
+          ctx.beginPath();
+          ctx.rect(sx0, sy0, sx1 - sx0, sy1 - sy0);
+          this.glyph_props.line_properties.set_vectorize(ctx, reference_point);
+          return ctx.stroke();
+        }
+      };
+
+      GlyphView.prototype.hit_test = function(geometry) {
+        if (geometry.type === "point") {
+          if (this._hit_point != null) {
+            return this._hit_point(geometry);
+          }
+          if (this._point_hit_warned == null) {
+            console.log("WARNING: 'point' selection not available on renderer");
+            this._point_hit_warned = true;
+          }
+          return null;
+        } else if (geometry.type === "rect") {
+          if (this._hit_rect != null) {
+            return this._hit_rect(geometry);
+          }
+          if (this._rect_hit_warned == null) {
+            console.log("WARNING: 'rect' selection not avaliable on renderer");
+            this._rect_hit_warned = true;
+          }
+          return null;
+        } else {
+          console.log("unrecognized selection geometry type '" + geometry.type + "'");
+          return null;
+        }
+      };
+
+      return GlyphView;
+
+    })(PlotWidget);
+    Glyph = (function(_super) {
+      __extends(Glyph, _super);
+
+      function Glyph() {
+        _ref1 = Glyph.__super__.constructor.apply(this, arguments);
+        return _ref1;
+      }
+
+      Glyph.prototype.defaults = function() {
+        return {
+          data_source: null
+        };
+      };
+
+      Glyph.prototype.display_defaults = function() {
+        return {
+          level: 'glyph',
+          radius_units: 'data',
+          length_units: 'screen',
+          angle_units: 'deg',
+          start_angle_units: 'deg',
+          end_angle_units: 'deg'
+        };
+      };
+
+      return Glyph;
+
+    })(HasParent);
+    return {
+      "Model": Glyph,
+      "View": GlyphView
+    };
+  });
+
+}).call(this);
+
+/*
+//@ sourceMappingURL=glyph.js.map
+*/;
+(function() {
+  var __hasProp = {}.hasOwnProperty,
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+  define('renderer/glyph/annular_wedge',["underscore", "rbush", "common/mathutils", "renderer/properties", "./glyph"], function(_, rbush, mathutils, Properties, Glyph) {
+    var AnnularWedge, AnnularWedgeView, _ref, _ref1;
+    AnnularWedgeView = (function(_super) {
+      __extends(AnnularWedgeView, _super);
+
+      function AnnularWedgeView() {
+        _ref = AnnularWedgeView.__super__.constructor.apply(this, arguments);
+        return _ref;
+      }
+
+      AnnularWedgeView.prototype._fields = ['x', 'y', 'inner_radius', 'outer_radius', 'start_angle', 'end_angle', 'direction:string'];
+
+      AnnularWedgeView.prototype._properties = ['line', 'fill'];
+
+      AnnularWedgeView.prototype._set_data = function() {
+        var i;
+        this.max_radius = _.max(this.outer_radius);
+        this.index = rbush();
+        return this.index.load((function() {
+          var _i, _ref1, _results;
+          _results = [];
+          for (i = _i = 0, _ref1 = this.x.length; 0 <= _ref1 ? _i < _ref1 : _i > _ref1; i = 0 <= _ref1 ? ++_i : --_i) {
+            _results.push([
+              this.x[i], this.y[i], this.x[i], this.y[i], {
+                'i': i
+              }
+            ]);
+          }
+          return _results;
+        }).call(this));
+      };
+
+      AnnularWedgeView.prototype._map_data = function() {
+        var i, _i, _ref1, _ref2, _results;
+        _ref1 = this.plot_view.map_to_screen(this.x, this.glyph_props.x.units, this.y, this.glyph_props.y.units), this.sx = _ref1[0], this.sy = _ref1[1];
+        this.inner_radius = this.distance_vector('x', 'inner_radius', 'edge');
+        this.outer_radius = this.distance_vector('x', 'outer_radius', 'edge');
+        this.angle = new Float32Array(this.start_angle.length);
+        _results = [];
+        for (i = _i = 0, _ref2 = this.start_angle.length; 0 <= _ref2 ? _i < _ref2 : _i > _ref2; i = 0 <= _ref2 ? ++_i : --_i) {
+          _results.push(this.angle[i] = this.end_angle[i] - this.start_angle[i]);
+        }
+        return _results;
+      };
+
+      AnnularWedgeView.prototype._render = function(ctx, indices, glyph_props, sx, sy, inner_radius, outer_radius) {
+        var i, _i, _len, _results;
+        if (sx == null) {
+          sx = this.sx;
+        }
+        if (sy == null) {
+          sy = this.sy;
+        }
+        if (inner_radius == null) {
+          inner_radius = this.inner_radius;
+        }
+        if (outer_radius == null) {
+          outer_radius = this.outer_radius;
+        }
+        _results = [];
+        for (_i = 0, _len = indices.length; _i < _len; _i++) {
+          i = indices[_i];
+          if (isNaN(sx[i] + sy[i] + inner_radius[i] + outer_radius[i] + this.start_angle[i] + this.angle[i])) {
+            continue;
+          }
+          ctx.translate(sx[i], sy[i]);
+          ctx.rotate(this.start_angle[i]);
+          ctx.moveTo(outer_radius[i], 0);
+          ctx.beginPath();
+          ctx.arc(0, 0, outer_radius[i], 0, this.angle[i], this.direction[i]);
+          ctx.rotate(this.angle[i]);
+          ctx.lineTo(inner_radius[i], 0);
+          ctx.arc(0, 0, inner_radius[i], 0, -this.angle[i], !this.direction[i]);
+          ctx.closePath();
+          ctx.rotate(-this.angle[i] - this.start_angle[i]);
+          ctx.translate(-sx[i], -sy[i]);
+          if (glyph_props.fill_properties.do_fill) {
+            glyph_props.fill_properties.set_vectorize(ctx, i);
+            ctx.fill();
+          }
+          if (glyph_props.line_properties.do_stroke) {
+            glyph_props.line_properties.set_vectorize(ctx, i);
+            _results.push(ctx.stroke());
+          } else {
+            _results.push(void 0);
+          }
+        }
+        return _results;
+      };
+
+      AnnularWedgeView.prototype._hit_point = function(geometry) {
+        var angle, candidates, candidates2, candidates3, dist, hits, i, pt, r2, sx, sx0, sx1, sy, sy0, sy1, vx, vx0, vx1, vy, vy0, vy1, x, x0, x1, y, y0, y1, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _m, _ref1, _ref2, _ref3, _ref4, _ref5, _ref6;
+        _ref1 = [geometry.vx, geometry.vy], vx = _ref1[0], vy = _ref1[1];
+        x = this.plot_view.xmapper.map_from_target(vx);
+        y = this.plot_view.ymapper.map_from_target(vy);
+        if (this.outer_radius_units === "screen") {
+          vx0 = vx - this.max_radius;
+          vx1 = vx + this.max_radius;
+          _ref2 = this.plot_view.xmapper.v_map_from_target([vx0, vx1]), x0 = _ref2[0], x1 = _ref2[1];
+          vy0 = vy - this.max_radius;
+          vy1 = vy + this.max_radius;
+          _ref3 = this.plot_view.ymapper.v_map_from_target([vy0, vy1]), y0 = _ref3[0], y1 = _ref3[1];
+        } else {
+          x0 = x - this.max_radius;
+          x1 = x + this.max_radius;
+          y0 = y - this.max_radius;
+          y1 = y + this.max_radius;
+        }
+        candidates = (function() {
+          var _i, _len, _ref4, _results;
+          _ref4 = this.index.search([x0, y0, x1, y1]);
+          _results = [];
+          for (_i = 0, _len = _ref4.length; _i < _len; _i++) {
+            pt = _ref4[_i];
+            _results.push(pt[4].i);
+          }
+          return _results;
+        }).call(this);
+        candidates2 = [];
+        if (this.outer_radius_units === "screen") {
+          sx = this.plot_view.view_state.vx_to_sx(vx);
+          sy = this.plot_view.view_state.vy_to_sy(vy);
+          for (_i = 0, _len = candidates.length; _i < _len; _i++) {
+            i = candidates[_i];
+            r2 = Math.pow(this.outer_radius[i], 2);
+            dist = Math.pow(this.sx[i] - sx, 2) + Math.pow(this.sy[i] - sy, 2);
+            if (dist <= r2) {
+              candidates2.push([i, dist]);
+            }
+          }
+        } else {
+          for (_j = 0, _len1 = candidates.length; _j < _len1; _j++) {
+            i = candidates[_j];
+            r2 = Math.pow(this.outer_radius[i], 2);
+            sx0 = this.plot_view.xmapper.map_to_target(x);
+            sx1 = this.plot_view.xmapper.map_to_target(this.x[i]);
+            sy0 = this.plot_view.ymapper.map_to_target(y);
+            sy1 = this.plot_view.ymapper.map_to_target(this.y[i]);
+            dist = Math.pow(sx0 - sx1, 2) + Math.pow(sy0 - sy1, 2);
+            if (dist <= r2) {
+              candidates2.push([i, dist]);
+            }
+          }
+        }
+        candidates3 = [];
+        if (this.inner_radius_units === "screen") {
+          sx = this.plot_view.view_state.vx_to_sx(vx);
+          sy = this.plot_view.view_state.vy_to_sy(vy);
+          for (_k = 0, _len2 = candidates2.length; _k < _len2; _k++) {
+            _ref4 = candidates2[_k], i = _ref4[0], dist = _ref4[1];
+            r2 = Math.pow(this.inner_radius[i], 2);
+            if (dist >= r2) {
+              candidates3.push([i, dist]);
+            }
+          }
+        } else {
+          for (_l = 0, _len3 = candidates2.length; _l < _len3; _l++) {
+            _ref5 = candidates2[_l], i = _ref5[0], dist = _ref5[1];
+            r2 = Math.pow(this.inner_radius[i], 2);
+            sx0 = this.plot_view.xmapper.map_to_target(x);
+            sx1 = this.plot_view.xmapper.map_to_target(this.x[i]);
+            sy0 = this.plot_view.ymapper.map_to_target(y);
+            sy1 = this.plot_view.ymapper.map_to_target(this.y[i]);
+            if (dist >= r2) {
+              candidates3.push([i, dist]);
+            }
+          }
+        }
+        hits = [];
+        for (_m = 0, _len4 = candidates3.length; _m < _len4; _m++) {
+          _ref6 = candidates3[_m], i = _ref6[0], dist = _ref6[1];
+          sx = this.plot_view.view_state.vx_to_sx(vx);
+          sy = this.plot_view.view_state.vy_to_sy(vy);
+          angle = Math.atan2(sy - this.sy[i], sx - this.sx[i]);
+          if (mathutils.angle_between(-angle, -this.start_angle[i], -this.end_angle[i], this.direction[i])) {
+            hits.push([i, dist]);
+          }
+        }
+        hits = _.chain(hits).sortBy(function(elt) {
+          return elt[1];
+        }).map(function(elt) {
+          return elt[0];
+        }).value();
+        return hits;
+      };
+
+      AnnularWedgeView.prototype.draw_legend = function(ctx, x0, x1, y0, y1) {
+        var indices, inner_radius, outer_radius, r, reference_point, sx, sy, _ref1;
+        reference_point = (_ref1 = this.get_reference_point()) != null ? _ref1 : 0;
+        indices = [reference_point];
+        sx = {};
+        sx[reference_point] = (x0 + x1) / 2;
+        sy = {};
+        sy[reference_point] = (y0 + y1) / 2;
+        r = Math.min(Math.abs(x1 - x0), Math.abs(y1 - y0)) * 0.5;
+        inner_radius = {};
+        inner_radius[reference_point] = r * 0.25;
+        outer_radius = {};
+        outer_radius[reference_point] = r * 0.8;
+        return this._render(ctx, indices, this.glyph_props, sx, sy, inner_radius, outer_radius);
+      };
+
+      return AnnularWedgeView;
+
+    })(Glyph.View);
+    AnnularWedge = (function(_super) {
+      __extends(AnnularWedge, _super);
+
+      function AnnularWedge() {
+        _ref1 = AnnularWedge.__super__.constructor.apply(this, arguments);
+        return _ref1;
+      }
+
+      AnnularWedge.prototype.default_view = AnnularWedgeView;
+
+      AnnularWedge.prototype.type = 'Glyph';
+
+      AnnularWedge.prototype.display_defaults = function() {
+        return _.extend(AnnularWedge.__super__.display_defaults.call(this), {
+          direction: 'anticlock',
+          fill_color: 'gray',
+          fill_alpha: 1.0,
+          line_color: 'red',
+          line_width: 1,
+          line_alpha: 1.0,
+          line_join: 'miter',
+          line_cap: 'butt',
+          line_dash: [],
+          line_dash_offset: 0
+        });
+      };
+
+      return AnnularWedge;
+
+    })(Glyph.Model);
+    return {
+      "Model": AnnularWedge,
+      "View": AnnularWedgeView
+    };
+  });
+
+}).call(this);
+
+/*
+//@ sourceMappingURL=annular_wedge.js.map
+*/;
+(function() {
+  var __hasProp = {}.hasOwnProperty,
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+  define('renderer/glyph/annulus',["underscore", "rbush", "renderer/properties", "./glyph"], function(_, rbush, Properties, Glyph) {
+    var Annulus, AnnulusView, _ref, _ref1;
+    AnnulusView = (function(_super) {
+      __extends(AnnulusView, _super);
+
+      function AnnulusView() {
+        _ref = AnnulusView.__super__.constructor.apply(this, arguments);
+        return _ref;
+      }
+
+      AnnulusView.prototype._fields = ['x', 'y', 'inner_radius', 'outer_radius'];
+
+      AnnulusView.prototype._properties = ['line', 'fill'];
+
+      AnnulusView.prototype._set_data = function() {
+        var i;
+        this.max_radius = _.max(this.outer_radius);
+        this.index = rbush();
+        return this.index.load((function() {
+          var _i, _ref1, _results;
+          _results = [];
+          for (i = _i = 0, _ref1 = this.x.length; 0 <= _ref1 ? _i < _ref1 : _i > _ref1; i = 0 <= _ref1 ? ++_i : --_i) {
+            _results.push([
+              this.x[i], this.y[i], this.x[i], this.y[i], {
+                'i': i
+              }
+            ]);
+          }
+          return _results;
+        }).call(this));
+      };
+
+      AnnulusView.prototype._map_data = function() {
+        var _ref1;
+        _ref1 = this.plot_view.map_to_screen(this.x, this.glyph_props.x.units, this.y, this.glyph_props.y.units), this.sx = _ref1[0], this.sy = _ref1[1];
+        this.inner_radius = this.distance_vector('x', 'inner_radius', 'edge');
+        return this.outer_radius = this.distance_vector('x', 'outer_radius', 'edge');
+      };
+
+      AnnulusView.prototype._render = function(ctx, indices, glyph_props, sx, sy, inner_radius, outer_radius) {
+        var i, _i, _len, _results;
+        if (sx == null) {
+          sx = this.sx;
+        }
+        if (sy == null) {
+          sy = this.sy;
+        }
+        if (inner_radius == null) {
+          inner_radius = this.inner_radius;
+        }
+        if (outer_radius == null) {
+          outer_radius = this.outer_radius;
+        }
+        _results = [];
+        for (_i = 0, _len = indices.length; _i < _len; _i++) {
+          i = indices[_i];
+          if (isNaN(sx[i] + sy[i] + inner_radius[i] + outer_radius[i])) {
+            continue;
+          }
+          ctx.beginPath();
+          ctx.arc(sx[i], sy[i], inner_radius[i], 0, 2 * Math.PI * 2, false);
+          ctx.moveTo(sx[i] + outer_radius[i], sy[i]);
+          ctx.arc(sx[i], sy[i], outer_radius[i], 0, 2 * Math.PI * 2, true);
+          if (glyph_props.fill_properties.do_fill) {
+            glyph_props.fill_properties.set_vectorize(ctx, i);
+            ctx.fill();
+          }
+          if (glyph_props.line_properties.do_stroke) {
+            glyph_props.line_properties.set_vectorize(ctx, i);
+            _results.push(ctx.stroke());
+          } else {
+            _results.push(void 0);
+          }
+        }
+        return _results;
+      };
+
+      AnnulusView.prototype._hit_point = function(geometry) {
+        var candidates, candidates2, dist, hits, i, pt, r2, sx, sx0, sx1, sy, sy0, sy1, vx, vx0, vx1, vy, vy0, vy1, x, x0, x1, y, y0, y1, _i, _j, _k, _l, _len, _len1, _len2, _len3, _ref1, _ref2, _ref3, _ref4, _ref5;
+        _ref1 = [geometry.vx, geometry.vy], vx = _ref1[0], vy = _ref1[1];
+        x = this.plot_view.xmapper.map_from_target(vx);
+        y = this.plot_view.ymapper.map_from_target(vy);
+        if (this.outer_radius_units === "screen") {
+          vx0 = vx - this.max_radius;
+          vx1 = vx + this.max_radius;
+          _ref2 = this.plot_view.xmapper.v_map_from_target([vx0, vx1]), x0 = _ref2[0], x1 = _ref2[1];
+          vy0 = vy - this.max_radius;
+          vy1 = vy + this.max_radius;
+          _ref3 = this.plot_view.ymapper.v_map_from_target([vy0, vy1]), y0 = _ref3[0], y1 = _ref3[1];
+        } else {
+          x0 = x - this.max_radius;
+          x1 = x + this.max_radius;
+          y0 = y - this.max_radius;
+          y1 = y + this.max_radius;
+        }
+        candidates = (function() {
+          var _i, _len, _ref4, _results;
+          _ref4 = this.index.search([x0, y0, x1, y1]);
+          _results = [];
+          for (_i = 0, _len = _ref4.length; _i < _len; _i++) {
+            pt = _ref4[_i];
+            _results.push(pt[4].i);
+          }
+          return _results;
+        }).call(this);
+        candidates2 = [];
+        if (this.outer_radius_units === "screen") {
+          sx = this.plot_view.view_state.vx_to_sx(vx);
+          sy = this.plot_view.view_state.vy_to_sy(vy);
+          for (_i = 0, _len = candidates.length; _i < _len; _i++) {
+            i = candidates[_i];
+            r2 = Math.pow(this.outer_radius[i], 2);
+            dist = Math.pow(this.sx[i] - sx, 2) + Math.pow(this.sy[i] - sy, 2);
+            if (dist <= r2) {
+              candidates2.push([i, dist]);
+            }
+          }
+        } else {
+          for (_j = 0, _len1 = candidates.length; _j < _len1; _j++) {
+            i = candidates[_j];
+            r2 = Math.pow(this.outer_radius[i], 2);
+            sx0 = this.plot_view.xmapper.map_to_target(x);
+            sx1 = this.plot_view.xmapper.map_to_target(this.x[i]);
+            sy0 = this.plot_view.ymapper.map_to_target(y);
+            sy1 = this.plot_view.ymapper.map_to_target(this.y[i]);
+            dist = Math.pow(sx0 - sx1, 2) + Math.pow(sy0 - sy1, 2);
+            if (dist <= r2) {
+              candidates2.push([i, dist]);
+            }
+          }
+        }
+        hits = [];
+        if (this.inner_radius_units === "screen") {
+          sx = this.plot_view.view_state.vx_to_sx(vx);
+          sy = this.plot_view.view_state.vy_to_sy(vy);
+          for (_k = 0, _len2 = candidates2.length; _k < _len2; _k++) {
+            _ref4 = candidates2[_k], i = _ref4[0], dist = _ref4[1];
+            r2 = Math.pow(this.inner_radius[i], 2);
+            if (dist >= r2) {
+              hits.push([i, dist]);
+            }
+          }
+        } else {
+          for (_l = 0, _len3 = candidates2.length; _l < _len3; _l++) {
+            _ref5 = candidates2[_l], i = _ref5[0], dist = _ref5[1];
+            r2 = Math.pow(this.inner_radius[i], 2);
+            sx0 = this.plot_view.xmapper.map_to_target(x);
+            sx1 = this.plot_view.xmapper.map_to_target(this.x[i]);
+            sy0 = this.plot_view.ymapper.map_to_target(y);
+            sy1 = this.plot_view.ymapper.map_to_target(this.y[i]);
+            if (dist >= r2) {
+              hits.push([i, dist]);
+            }
+          }
+        }
+        hits = _.chain(hits).sortBy(function(elt) {
+          return elt[1];
+        }).map(function(elt) {
+          return elt[0];
+        }).value();
+        return hits;
+      };
+
+      AnnulusView.prototype.draw_legend = function(ctx, x0, x1, y0, y1) {
+        var indices, inner_radius, outer_radius, r, reference_point, sx, sy, _ref1;
+        reference_point = (_ref1 = this.get_reference_point()) != null ? _ref1 : 0;
+        indices = [reference_point];
+        sx = {};
+        sx[reference_point] = (x0 + x1) / 2;
+        sy = {};
+        sy[reference_point] = (y0 + y1) / 2;
+        r = Math.min(Math.abs(x1 - x0), Math.abs(y1 - y0)) * 0.5;
+        inner_radius = {};
+        inner_radius[reference_point] = r * 0.4;
+        outer_radius = {};
+        outer_radius[reference_point] = r * 0.8;
+        return this._render(ctx, indices, this.glyph_props, sx, sy, inner_radius, outer_radius);
+      };
+
+      return AnnulusView;
+
+    })(Glyph.View);
+    Annulus = (function(_super) {
+      __extends(Annulus, _super);
+
+      function Annulus() {
+        _ref1 = Annulus.__super__.constructor.apply(this, arguments);
+        return _ref1;
+      }
+
+      Annulus.prototype.default_view = AnnulusView;
+
+      Annulus.prototype.type = 'Glyph';
+
+      Annulus.prototype.display_defaults = function() {
+        return _.extend(Annulus.__super__.display_defaults.call(this), {
+          fill_color: 'gray',
+          fill_alpha: 1.0,
+          line_color: 'red',
+          line_width: 1,
+          line_alpha: 1.0,
+          line_join: 'miter',
+          line_cap: 'butt',
+          line_dash: [],
+          line_dash_offset: 0
+        });
+      };
+
+      return Annulus;
+
+    })(Glyph.Model);
+    return {
+      "Model": Annulus,
+      "View": AnnulusView
+    };
+  });
+
+}).call(this);
+
+/*
+//@ sourceMappingURL=annulus.js.map
+*/;
+(function() {
+  var __hasProp = {}.hasOwnProperty,
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+  define('renderer/glyph/arc',["underscore", "renderer/properties", "./glyph"], function(_, Properties, Glyph) {
+    var Arc, ArcView, _ref, _ref1;
+    ArcView = (function(_super) {
+      __extends(ArcView, _super);
+
+      function ArcView() {
+        _ref = ArcView.__super__.constructor.apply(this, arguments);
+        return _ref;
+      }
+
+      ArcView.prototype._fields = ['x', 'y', 'radius', 'start_angle', 'end_angle', 'direction:string'];
+
+      ArcView.prototype._properties = ['line'];
+
+      ArcView.prototype._map_data = function() {
+        var _ref1;
+        _ref1 = this.plot_view.map_to_screen(this.x, this.glyph_props.x.units, this.y, this.glyph_props.y.units), this.sx = _ref1[0], this.sy = _ref1[1];
+        return this.radius = this.distance_vector('x', 'radius', 'edge');
+      };
+
+      ArcView.prototype._render = function(ctx, indices, glyph_props, sx, sy, radius) {
+        var i, _i, _len, _results;
+        if (sx == null) {
+          sx = this.sx;
+        }
+        if (sy == null) {
+          sy = this.sy;
+        }
+        if (radius == null) {
+          radius = this.radius;
+        }
+        if (glyph_props.line_properties.do_stroke) {
+          _results = [];
+          for (_i = 0, _len = indices.length; _i < _len; _i++) {
+            i = indices[_i];
+            if (isNaN(sx[i] + sy[i] + radius[i] + this.start_angle[i] + this.end_angle[i] + this.direction[i])) {
+              continue;
+            }
+            ctx.beginPath();
+            ctx.arc(sx[i], sy[i], radius[i], this.start_angle[i], this.end_angle[i], this.direction[i]);
+            glyph_props.line_properties.set_vectorize(ctx, i);
+            _results.push(ctx.stroke());
+          }
+          return _results;
+        }
+      };
+
+      ArcView.prototype.draw_legend = function(ctx, x0, x1, y0, y1) {
+        var indices, radius, reference_point, sx, sy, _ref1;
+        reference_point = (_ref1 = this.get_reference_point()) != null ? _ref1 : 0;
+        indices = [reference_point];
+        sx = {};
+        sx[reference_point] = (x0 + x1) / 2;
+        sy = {};
+        sy[reference_point] = (y0 + y1) / 2;
+        radius = {};
+        radius[reference_point] = Math.min(Math.abs(x1 - x0), Math.abs(y1 - y0)) * 0.4;
+        return this._render(ctx, indices, this.glyph_props, sx, sy, radius);
+      };
+
+      return ArcView;
+
+    })(Glyph.View);
+    Arc = (function(_super) {
+      __extends(Arc, _super);
+
+      function Arc() {
+        _ref1 = Arc.__super__.constructor.apply(this, arguments);
+        return _ref1;
+      }
+
+      Arc.prototype.default_view = ArcView;
+
+      Arc.prototype.type = 'Glyph';
+
+      Arc.prototype.display_defaults = function() {
+        return _.extend(Arc.__super__.display_defaults.call(this), {
+          direction: 'anticlock',
+          line_color: 'red',
+          line_width: 1,
+          line_alpha: 1.0,
+          line_join: 'miter',
+          line_cap: 'butt',
+          line_dash: [],
+          line_dash_offset: 0
+        });
+      };
+
+      return Arc;
+
+    })(Glyph.Model);
+    return {
+      "Model": Arc,
+      "View": ArcView
+    };
+  });
+
+}).call(this);
+
+/*
+//@ sourceMappingURL=arc.js.map
+*/;
+(function() {
   var __hasProp = {}.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
@@ -17313,14 +17950,16 @@ if (typeof define === 'function' && define.amd) {
       };
 
       MarkerView.prototype._hit_point = function(geometry) {
-        var candidates, hits, i, s2, sx, sx0, sx1, sy, sy0, sy1, x, x0, x1, y0, y1, _i, _ref1, _ref2, _ref3, _ref4;
-        _ref1 = [geometry.sx, geometry.sy], sx = _ref1[0], sy = _ref1[1];
-        sx0 = sx - this.max_size;
-        sx1 = sx - this.max_size;
-        _ref2 = this.plot_view.xmapper.v_map_from_target([sx0, sx1]), x0 = _ref2[0], x1 = _ref2[1];
-        sy0 = sy - this.max_size;
-        sy1 = sy - this.max_size;
-        _ref3 = this.plot_view.ymapper.v_map_from_target([sy0, sy1]), y0 = _ref3[0], y1 = _ref3[1];
+        var candidates, dist, hits, i, s2, sx, sy, vx, vx0, vx1, vy, vy0, vy1, x, x0, x1, y0, y1, _i, _len, _ref1, _ref2, _ref3;
+        _ref1 = [geometry.vx, geometry.vy], vx = _ref1[0], vy = _ref1[1];
+        sx = this.plot_view.view_state.vx_to_sx(vx);
+        sy = this.plot_view.view_state.vy_to_sy(vy);
+        vx0 = vx - this.max_size;
+        vx1 = vx + this.max_size;
+        _ref2 = this.plot_view.xmapper.v_map_from_target([vx0, vx1]), x0 = _ref2[0], x1 = _ref2[1];
+        vy0 = vy - this.max_size;
+        vy1 = vy + this.max_size;
+        _ref3 = this.plot_view.ymapper.v_map_from_target([vy0, vy1]), y0 = _ref3[0], y1 = _ref3[1];
         candidates = (function() {
           var _i, _len, _ref4, _results;
           _ref4 = this.index.search([x0, y0, x1, y1]);
@@ -17332,12 +17971,19 @@ if (typeof define === 'function' && define.amd) {
           return _results;
         }).call(this);
         hits = [];
-        for (i = _i = 0, _ref4 = candidates.length; 0 <= _ref4 ? _i < _ref4 : _i > _ref4; i = 0 <= _ref4 ? ++_i : --_i) {
+        for (_i = 0, _len = candidates.length; _i < _len; _i++) {
+          i = candidates[_i];
           s2 = this.size[i] / 2;
+          dist = Math.abs(this.sx[i] - sx) + Math.abs(this.sy[i] - sy);
           if (Math.abs(this.sx[i] - sx) <= s2 && Math.abs(this.sy[i] - sy) <= s2) {
-            hits.push(i);
+            hits.push([i, dist]);
           }
         }
+        hits = _.chain(hits).sortBy(function(elt) {
+          return elt[1];
+        }).map(function(elt) {
+          return elt[0];
+        }).value();
         return hits;
       };
 
@@ -17630,7 +18276,7 @@ if (typeof define === 'function' && define.amd) {
             }
             return _results;
           }).call(this);
-          return this.radius_units = this.size_units;
+          return this.radius_units = this.glyph_props.size.units;
         } else {
           return this.radius = this.distance_vector('x', 'radius', 'edge');
         }
@@ -17659,7 +18305,7 @@ if (typeof define === 'function' && define.amd) {
           y0 -= this.max_radius;
           y1 += this.max_radius;
         }
-        return this.mask = (function() {
+        return (function() {
           var _i, _len, _ref5, _results;
           _ref5 = this.index.search([x0, y0, x1, y1]);
           _results = [];
@@ -17705,16 +18351,17 @@ if (typeof define === 'function' && define.amd) {
       };
 
       CircleView.prototype._hit_point = function(geometry) {
-        var candidates, hits, i, r2, sx, sx0, sx1, sy, sy0, sy1, x, x0, x1, y, y0, y1, _i, _j, _ref1, _ref2, _ref3, _ref4, _ref5, _ref6;
-        _ref1 = [geometry.sx, geometry.sy], sx = _ref1[0], sy = _ref1[1];
-        _ref2 = this.plot_view.xmapper.v_map_from_target([sx, sy]), x = _ref2[0], y = _ref2[1];
+        var candidates, dist, hits, i, pt, r2, sx, sx0, sx1, sy, sy0, sy1, vx, vx0, vx1, vy, vy0, vy1, x, x0, x1, y, y0, y1, _i, _j, _len, _len1, _ref1, _ref2, _ref3;
+        _ref1 = [geometry.vx, geometry.vy], vx = _ref1[0], vy = _ref1[1];
+        x = this.plot_view.xmapper.map_from_target(vx);
+        y = this.plot_view.ymapper.map_from_target(vy);
         if (this.radius_units === "screen") {
-          sx0 = sx - this.max_radius;
-          sx1 = sx - this.max_radius;
-          _ref3 = this.plot_view.xmapper.v_map_from_target([sx0, sx1]), x0 = _ref3[0], x1 = _ref3[1];
-          sy0 = sy - this.max_radius;
-          sy1 = sy - this.max_radius;
-          _ref4 = this.plot_view.ymapper.v_map_from_target([sy0, sy1]), y0 = _ref4[0], y1 = _ref4[1];
+          vx0 = vx - this.max_radius;
+          vx1 = vx + this.max_radius;
+          _ref2 = this.plot_view.xmapper.v_map_from_target([vx0, vx1]), x0 = _ref2[0], x1 = _ref2[1];
+          vy0 = vy - this.max_radius;
+          vy1 = vy + this.max_radius;
+          _ref3 = this.plot_view.ymapper.v_map_from_target([vy0, vy1]), y0 = _ref3[0], y1 = _ref3[1];
         } else {
           x0 = x - this.max_radius;
           x1 = x + this.max_radius;
@@ -17722,31 +18369,46 @@ if (typeof define === 'function' && define.amd) {
           y1 = y + this.max_radius;
         }
         candidates = (function() {
-          var _i, _len, _ref5, _results;
-          _ref5 = this.index.search([x0, y0, x1, y1]);
+          var _i, _len, _ref4, _results;
+          _ref4 = this.index.search([x0, y0, x1, y1]);
           _results = [];
-          for (_i = 0, _len = _ref5.length; _i < _len; _i++) {
-            x = _ref5[_i];
-            _results.push(x[4].i);
+          for (_i = 0, _len = _ref4.length; _i < _len; _i++) {
+            pt = _ref4[_i];
+            _results.push(pt[4].i);
           }
           return _results;
         }).call(this);
         hits = [];
         if (this.radius_units === "screen") {
-          for (i = _i = 0, _ref5 = candidates.length; 0 <= _ref5 ? _i < _ref5 : _i > _ref5; i = 0 <= _ref5 ? ++_i : --_i) {
-            r2 = this.radius[i] ^ 2;
-            if ((this.sx[i] - sx) ^ 2 + (this.sy[i] - sy) ^ 2 <= r2) {
-              hits.push(i);
+          sx = this.plot_view.view_state.vx_to_sx(vx);
+          sy = this.plot_view.view_state.vy_to_sy(vy);
+          for (_i = 0, _len = candidates.length; _i < _len; _i++) {
+            i = candidates[_i];
+            r2 = Math.pow(this.radius[i], 2);
+            dist = Math.pow(this.sx[i] - sx, 2) + Math.pow(this.sy[i] - sy, 2);
+            if (dist <= r2) {
+              hits.push([i, dist]);
             }
           }
         } else {
-          for (i = _j = 0, _ref6 = candidates.length; 0 <= _ref6 ? _j < _ref6 : _j > _ref6; i = 0 <= _ref6 ? ++_j : --_j) {
-            r2 = this.radius[i] ^ 2;
-            if ((this.x[i] - x) ^ 2 + (this.y[i] - y) ^ 2 <= r2) {
-              hits.push(i);
+          for (_j = 0, _len1 = candidates.length; _j < _len1; _j++) {
+            i = candidates[_j];
+            r2 = Math.pow(this.radius[i], 2);
+            sx0 = this.plot_view.xmapper.map_to_target(x);
+            sx1 = this.plot_view.xmapper.map_to_target(this.x[i]);
+            sy0 = this.plot_view.ymapper.map_to_target(y);
+            sy1 = this.plot_view.ymapper.map_to_target(this.y[i]);
+            dist = Math.pow(sx0 - sx1, 2) + Math.pow(sy0 - sy1, 2);
+            if (dist <= r2) {
+              hits.push([i, dist]);
             }
           }
         }
+        hits = _.chain(hits).sortBy(function(elt) {
+          return elt[1];
+        }).map(function(elt) {
+          return elt[0];
+        }).value();
         return hits;
       };
 
@@ -18637,9 +19299,18 @@ if (typeof define === 'function' && define.amd) {
         return _ref;
       }
 
-      ImageView.prototype._fields = ['image:array', 'x', 'y', 'dw', 'dh', 'palette:string'];
-
       ImageView.prototype._properties = [];
+
+      ImageView.prototype.initialize = function(options) {
+        var spec;
+        spec = this.mget('glyphspec');
+        if (spec.rows != null) {
+          this._fields = ['image:array', 'rows', 'cols', 'x', 'y', 'dw', 'dh', 'palette:string'];
+        } else {
+          this._fields = ['image:array', 'x', 'y', 'dw', 'dh', 'palette:string'];
+        }
+        return ImageView.__super__.initialize.call(this, options);
+      };
 
       ImageView.prototype._set_data = function(data) {
         var buf, buf8, canvas, cmap, ctx, i, image_data, img, _i, _j, _ref1, _ref2, _results;
@@ -18658,8 +19329,13 @@ if (typeof define === 'function' && define.amd) {
         }
         _results = [];
         for (i = _j = 0, _ref2 = this.image.length; 0 <= _ref2 ? _j < _ref2 : _j > _ref2; i = 0 <= _ref2 ? ++_j : --_j) {
-          this.height[i] = this.image[i].length;
-          this.width[i] = this.image[i][0].length;
+          if (this.rows != null) {
+            this.height[i] = this.rows[i];
+            this.width[i] = this.cols[i];
+          } else {
+            this.height[i] = this.image[i].length;
+            this.width[i] = this.image[i][0].length;
+          }
           canvas = document.createElement('canvas');
           canvas.width = this.width[i];
           canvas.height = this.height[i];
@@ -18668,7 +19344,11 @@ if (typeof define === 'function' && define.amd) {
           cmap = new LinearColorMapper({}, {
             palette: all_palettes[this.palette[i]]
           });
-          img = _.flatten(this.image[i]);
+          if (this.rows != null) {
+            img = this.image[i];
+          } else {
+            img = _.flatten(this.image[i]);
+          }
           buf = cmap.v_map_screen(img);
           buf8 = new Uint8ClampedArray(buf);
           image_data.data.set(buf8);
@@ -18703,8 +19383,7 @@ if (typeof define === 'function' && define.amd) {
           ctx.scale(1, -1);
           ctx.translate(0, -y_offset);
         }
-        ctx.setImageSmoothingEnabled(old_smoothing);
-        return ctx.restore();
+        return ctx.setImageSmoothingEnabled(old_smoothing);
       };
 
       return ImageView;
@@ -18757,9 +19436,18 @@ if (typeof define === 'function' && define.amd) {
         return _ref;
       }
 
-      ImageRGBAView.prototype._fields = ['image:array', 'x', 'y', 'dw', 'dh'];
-
       ImageRGBAView.prototype._properties = [];
+
+      ImageRGBAView.prototype.initialize = function(options) {
+        var spec;
+        spec = this.mget('glyphspec');
+        if (spec.rows != null) {
+          this._fields = ['image:array', 'rows', 'cols', 'x', 'y', 'dw', 'dh'];
+        } else {
+          this._fields = ['image:array', 'x', 'y', 'dw', 'dh'];
+        }
+        return ImageRGBAView.__super__.initialize.call(this, options);
+      };
 
       ImageRGBAView.prototype._set_data = function() {
         var buf, buf8, canvas, color, ctx, flat, i, image_data, j, _i, _j, _k, _ref1, _ref2, _ref3, _results;
@@ -18777,21 +19465,30 @@ if (typeof define === 'function' && define.amd) {
         }
         _results = [];
         for (i = _j = 0, _ref2 = this.image.length; 0 <= _ref2 ? _j < _ref2 : _j > _ref2; i = 0 <= _ref2 ? ++_j : --_j) {
-          this.height[i] = this.image[i].length;
-          this.width[i] = this.image[i][0].length;
+          if (this.rows != null) {
+            this.height[i] = this.rows[i];
+            this.width[i] = this.cols[i];
+          } else {
+            this.height[i] = this.image[i].length;
+            this.width[i] = this.image[i][0].length;
+          }
           canvas = document.createElement('canvas');
           canvas.width = this.width[i];
           canvas.height = this.height[i];
           ctx = canvas.getContext('2d');
           image_data = ctx.getImageData(0, 0, this.width[i], this.height[i]);
-          flat = _.flatten(this.image[i]);
-          buf = new ArrayBuffer(flat.length * 4);
-          color = new Uint32Array(buf);
-          for (j = _k = 0, _ref3 = flat.length; 0 <= _ref3 ? _k < _ref3 : _k > _ref3; j = 0 <= _ref3 ? ++_k : --_k) {
-            color[j] = flat[j];
+          if (this.rows != null) {
+            image_data.data.set(new Uint8ClampedArray(this.image[i]));
+          } else {
+            flat = _.flatten(this.image[i]);
+            buf = new ArrayBuffer(flat.length * 4);
+            color = new Uint32Array(buf);
+            for (j = _k = 0, _ref3 = flat.length; 0 <= _ref3 ? _k < _ref3 : _k > _ref3; j = 0 <= _ref3 ? ++_k : --_k) {
+              color[j] = flat[j];
+            }
+            buf8 = new Uint8ClampedArray(buf);
+            image_data.data.set(buf8);
           }
-          buf8 = new Uint8ClampedArray(buf);
-          image_data.data.set(buf8);
           ctx.putImageData(image_data, 0, 0);
           _results.push(this.image_data[i] = canvas);
         }
@@ -18823,8 +19520,7 @@ if (typeof define === 'function' && define.amd) {
           ctx.scale(1, -1);
           ctx.translate(0, -y_offset);
         }
-        ctx.setImageSmoothingEnabled(old_smoothing);
-        return ctx.restore();
+        return ctx.setImageSmoothingEnabled(old_smoothing);
       };
 
       return ImageRGBAView;
@@ -18922,8 +19618,9 @@ if (typeof define === 'function' && define.amd) {
       };
 
       ImageURIView.prototype._render = function(ctx, indices, glyph_props) {
-        var i, img, _i, _len,
+        var i, img, _i, _len, _results,
           _this = this;
+        _results = [];
         for (_i = 0, _len = indices.length; _i < _len; _i++) {
           i = indices[_i];
           if (isNaN(this.sx[i] + this.sy[i] + this.angle[i])) {
@@ -18944,12 +19641,14 @@ if (typeof define === 'function' && define.amd) {
               };
             })(img, i);
             img.src = this.url[i];
-            this.need_load[i] = false;
+            _results.push(this.need_load[i] = false);
           } else if (this.loaded[i]) {
-            this._render_image(ctx, vs, i, this.image[i]);
+            _results.push(this._render_image(ctx, vs, i, this.image[i]));
+          } else {
+            _results.push(void 0);
           }
         }
-        return ctx.restore();
+        return _results;
       };
 
       ImageURIView.prototype._render_image = function(ctx, vs, i, img) {
@@ -19125,7 +19824,7 @@ if (typeof define === 'function' && define.amd) {
       LineView.prototype._render = function(ctx, indices, glyph_props) {
         var drawing, i, _i, _len;
         drawing = false;
-        glyph_props.line_properties.set_vectorize(ctx, 0);
+        glyph_props.line_properties.set(ctx, glyph_props);
         for (_i = 0, _len = indices.length; _i < _len; _i++) {
           i = indices[_i];
           if (isNaN(this.sx[i] + this.sy[i]) && drawing) {
@@ -19481,9 +20180,8 @@ if (typeof define === 'function' && define.amd) {
             }
           }
           ctx.closePath();
-          ctx.stroke();
+          return ctx.stroke();
         }
-        return ctx.restore();
       };
 
       PatchView.prototype.draw_legend = function(ctx, x0, x1, y0, y1) {
@@ -19556,9 +20254,9 @@ if (typeof define === 'function' && define.amd) {
       };
 
       PatchesView.prototype._render = function(ctx, indices, glyph_props) {
-        var i, j, sx, sy, _i, _j, _k, _len, _ref1, _ref2, _ref3;
+        var i, j, sx, sy, _i, _j, _k, _len, _ref1, _ref2, _ref3, _results;
         ctx = this.plot_view.ctx;
-        ctx.save();
+        _results = [];
         for (_i = 0, _len = indices.length; _i < _len; _i++) {
           i = indices[_i];
           _ref1 = this.plot_view.map_to_screen(this.xs[i], glyph_props.xs.units, this.ys[i], glyph_props.ys.units), sx = _ref1[0], sy = _ref1[1];
@@ -19598,10 +20296,12 @@ if (typeof define === 'function' && define.amd) {
               }
             }
             ctx.closePath();
-            ctx.stroke();
+            _results.push(ctx.stroke());
+          } else {
+            _results.push(void 0);
           }
         }
-        return ctx.restore();
+        return _results;
       };
 
       PatchesView.prototype.draw_legend = function(ctx, x0, x1, y0, y1) {
@@ -20080,7 +20780,7 @@ if (typeof define === 'function' && define.amd) {
   var __hasProp = {}.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
-  define('renderer/glyph/rect',["underscore", "renderer/properties", "./glyph"], function(_, Properties, Glyph) {
+  define('renderer/glyph/rect',["underscore", "rbush", "renderer/properties", "./glyph"], function(_, rbush, Properties, Glyph) {
     var Rect, RectView, _ref, _ref1;
     RectView = (function(_super) {
       __extends(RectView, _super);
@@ -20095,13 +20795,12 @@ if (typeof define === 'function' && define.amd) {
       RectView.prototype._properties = ['line', 'fill'];
 
       RectView.prototype._map_data = function() {
-        var i, sxi, syi, _i, _ref1, _ref2, _results;
+        var i, sxi, syi, _i, _ref1, _ref2;
         _ref1 = this.plot_view.map_to_screen(this.x, this.glyph_props.x.units, this.y, this.glyph_props.y.units), sxi = _ref1[0], syi = _ref1[1];
         this.sw = this.distance_vector('x', 'width', 'center');
         this.sh = this.distance_vector('y', 'height', 'center');
         this.sx = new Array(sxi.length);
         this.sy = new Array(sxi.length);
-        _results = [];
         for (i = _i = 0, _ref2 = sxi.length; 0 <= _ref2 ? _i < _ref2 : _i > _ref2; i = 0 <= _ref2 ? ++_i : --_i) {
           if (Math.abs(sxi[i] - this.sw[i]) < 2) {
             this.sx[i] = Math.round(sxi[i]);
@@ -20109,12 +20808,30 @@ if (typeof define === 'function' && define.amd) {
             this.sx[i] = sxi[i];
           }
           if (Math.abs(syi[i] - this.sh[i]) < 2) {
-            _results.push(this.sy[i] = Math.round(syi[i]));
+            this.sy[i] = Math.round(syi[i]);
           } else {
-            _results.push(this.sy[i] = syi[i]);
+            this.sy[i] = syi[i];
           }
         }
-        return _results;
+        this.max_width = _.max(this.width);
+        return this.max_height = _.max(this.height);
+      };
+
+      RectView.prototype._set_data = function() {
+        var i;
+        this.index = rbush();
+        return this.index.load((function() {
+          var _i, _ref1, _results;
+          _results = [];
+          for (i = _i = 0, _ref1 = this.x.length; 0 <= _ref1 ? _i < _ref1 : _i > _ref1; i = 0 <= _ref1 ? ++_i : --_i) {
+            _results.push([
+              this.x[i], this.y[i], this.x[i], this.y[i], {
+                'i': i
+              }
+            ]);
+          }
+          return _results;
+        }).call(this));
       };
 
       RectView.prototype._render = function(ctx, indices, glyph_props, sx, sy, sw, sh) {
@@ -20172,6 +20889,89 @@ if (typeof define === 'function' && define.amd) {
           }
           return ctx.stroke();
         }
+      };
+
+      RectView.prototype._hit_point = function(geometry) {
+        var c, candidates, d, height_in, hits, i, max_height, max_width, pt, px, py, s, sx, sy, vx, vx0, vx1, vy, vy0, vy1, width_in, x, x0, x1, xcat, y, y0, y1, ycat, _i, _len, _ref1, _ref2, _ref3;
+        _ref1 = [geometry.vx, geometry.vy], vx = _ref1[0], vy = _ref1[1];
+        x = this.plot_view.xmapper.map_from_target(vx);
+        y = this.plot_view.ymapper.map_from_target(vy);
+        xcat = typeof x === "string";
+        ycat = typeof y === "string";
+        if (xcat || ycat) {
+          candidates = (function() {
+            var _i, _ref2, _results;
+            _results = [];
+            for (i = _i = 0, _ref2 = this.x.length; 0 <= _ref2 ? _i < _ref2 : _i > _ref2; i = 0 <= _ref2 ? ++_i : --_i) {
+              _results.push(i);
+            }
+            return _results;
+          }).call(this);
+        } else {
+          if (this.width_units === "screen" || xcat) {
+            max_width = this.max_width;
+            if (xcat) {
+              max_width = this.plot_view.xmapper.map_to_target(max_width);
+            }
+            vx0 = vx - 2 * max_width;
+            vx1 = vx + 2 * max_width;
+            _ref2 = this.plot_view.xmapper.v_map_from_target([vx0, vx1]), x0 = _ref2[0], x1 = _ref2[1];
+          } else {
+            x0 = x - 2 * this.max_width;
+            x1 = x + 2 * this.max_width;
+          }
+          if (this.height_units === "screen" || ycat) {
+            max_height = this.max_height;
+            if (ycat) {
+              max_height = this.plot_view.ymapper.map_to_target(max_height);
+            }
+            vy0 = vy - 2 * max_height;
+            vy1 = vy + 2 * max_height;
+            _ref3 = this.plot_view.ymapper.v_map_from_target([vy0, vy1]), y0 = _ref3[0], y1 = _ref3[1];
+          } else {
+            y0 = y - 2 * this.max_height;
+            y1 = y + 2 * this.max_height;
+          }
+          candidates = (function() {
+            var _i, _len, _ref4, _results;
+            _ref4 = this.index.search([x0, y0, x1, y1]);
+            _results = [];
+            for (_i = 0, _len = _ref4.length; _i < _len; _i++) {
+              pt = _ref4[_i];
+              _results.push(pt[4].i);
+            }
+            return _results;
+          }).call(this);
+        }
+        hits = [];
+        for (_i = 0, _len = candidates.length; _i < _len; _i++) {
+          i = candidates[_i];
+          if (this.width_units === "screen" || xcat) {
+            sx = this.plot_view.view_state.vx_to_sx(vx);
+          } else {
+            sx = this.plot_view.view_state.vx_to_sx(this.plot_view.xmapper.map_to_target(x));
+          }
+          if (this.height_units === "screen" || ycat) {
+            sy = this.plot_view.view_state.vy_to_sy(vy);
+          } else {
+            sy = this.plot_view.view_state.vy_to_sy(this.plot_view.ymapper.map_to_target(y));
+          }
+          if (this.angle[i]) {
+            d = Math.sqrt(Math.pow(sx - this.sx[i], 2) + Math.pow(sy - this.sy[i], 2));
+            s = Math.sin(-this.angle[i]);
+            c = Math.cos(-this.angle[i]);
+            px = c * (sx - this.sx[i]) - s * (sy - this.sy[i]) + this.sx[i];
+            py = s * (sx - this.sx[i]) + c * (sy - this.sy[i]) + this.sy[i];
+            sx = px;
+            sy = py;
+          }
+          width_in = Math.abs(this.sx[i] - sx) <= this.sw[i] / 2;
+          height_in = Math.abs(this.sy[i] - sy) <= this.sh[i] / 2;
+          if (height_in && width_in) {
+            hits.push(i);
+          }
+        }
+        return hits;
       };
 
       RectView.prototype.draw_legend = function(ctx, x0, x1, y0, y1) {
@@ -20255,12 +21055,6 @@ if (typeof define === 'function' && define.amd) {
       }
 
       SquareView.prototype._properties = ['line', 'fill'];
-
-      SquareView.prototype._map_data = function() {
-        var _ref1;
-        _ref1 = this.plot_view.map_to_screen(this.x, this.glyph_props.x.units, this.y, this.glyph_props.y.units), this.sx = _ref1[0], this.sy = _ref1[1];
-        return this.size = this.distance_vector('x', 'size', 'center');
-      };
 
       SquareView.prototype._render = function(ctx, indices, glyph_props, sx, sy, size) {
         var i, _i, _len, _results;
@@ -20354,12 +21148,6 @@ if (typeof define === 'function' && define.amd) {
       }
 
       SquareXView.prototype._properties = ['line', 'fill'];
-
-      SquareXView.prototype._map_data = function() {
-        var _ref1;
-        _ref1 = this.plot_view.map_to_screen(this.x, this.glyph_props.x.units, this.y, this.glyph_props.y.units), this.sx = _ref1[0], this.sy = _ref1[1];
-        return this.size = this.distance_vector('x', 'size', 'center');
-      };
 
       SquareXView.prototype._render = function(ctx, indices, glyph_props, sx, sy, size) {
         var i, r, _i, _len, _results;
@@ -20459,12 +21247,6 @@ if (typeof define === 'function' && define.amd) {
       }
 
       SquareCrossView.prototype._properties = ['line', 'fill'];
-
-      SquareCrossView.prototype._map_data = function() {
-        var _ref1;
-        _ref1 = this.plot_view.map_to_screen(this.x, this.glyph_props.x.units, this.y, this.glyph_props.y.units), this.sx = _ref1[0], this.sy = _ref1[1];
-        return this.size = this.distance_vector('x', 'size', 'center');
-      };
 
       SquareCrossView.prototype._render = function(ctx, indices, glyph_props, sx, sy, size) {
         var i, r, _i, _len, _results;
@@ -20839,7 +21621,7 @@ if (typeof define === 'function' && define.amd) {
   var __hasProp = {}.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
-  define('renderer/glyph/wedge',["underscore", "renderer/properties", "./glyph"], function(_, Properties, Glyph) {
+  define('renderer/glyph/wedge',["underscore", "rbush", "common/mathutils", "renderer/properties", "./glyph"], function(_, rbush, mathutils, Properties, Glyph) {
     var Wedge, WedgeView, _ref, _ref1;
     WedgeView = (function(_super) {
       __extends(WedgeView, _super);
@@ -20852,6 +21634,24 @@ if (typeof define === 'function' && define.amd) {
       WedgeView.prototype._fields = ['x', 'y', 'radius', 'start_angle', 'end_angle', 'direction:string'];
 
       WedgeView.prototype._properties = ['line', 'fill'];
+
+      WedgeView.prototype._set_data = function() {
+        var i;
+        this.max_radius = _.max(this.radius);
+        this.index = rbush();
+        return this.index.load((function() {
+          var _i, _ref1, _results;
+          _results = [];
+          for (i = _i = 0, _ref1 = this.x.length; 0 <= _ref1 ? _i < _ref1 : _i > _ref1; i = 0 <= _ref1 ? ++_i : --_i) {
+            _results.push([
+              this.x[i], this.y[i], this.x[i], this.y[i], {
+                'i': i
+              }
+            ]);
+          }
+          return _results;
+        }).call(this));
+      };
 
       WedgeView.prototype._map_data = function() {
         var _ref1;
@@ -20892,6 +21692,78 @@ if (typeof define === 'function' && define.amd) {
           }
         }
         return _results;
+      };
+
+      WedgeView.prototype._hit_point = function(geometry) {
+        var angle, candidates, candidates2, dist, hits, i, pt, r2, sx, sx0, sx1, sy, sy0, sy1, vx, vx0, vx1, vy, vy0, vy1, x, x0, x1, y, y0, y1, _i, _j, _k, _len, _len1, _len2, _ref1, _ref2, _ref3, _ref4;
+        _ref1 = [geometry.vx, geometry.vy], vx = _ref1[0], vy = _ref1[1];
+        x = this.plot_view.xmapper.map_from_target(vx);
+        y = this.plot_view.ymapper.map_from_target(vy);
+        if (this.radius_units === "screen") {
+          vx0 = vx - this.max_radius;
+          vx1 = vx + this.max_radius;
+          _ref2 = this.plot_view.xmapper.v_map_from_target([vx0, vx1]), x0 = _ref2[0], x1 = _ref2[1];
+          vy0 = vy - this.max_radius;
+          vy1 = vy + this.max_radius;
+          _ref3 = this.plot_view.ymapper.v_map_from_target([vy0, vy1]), y0 = _ref3[0], y1 = _ref3[1];
+        } else {
+          x0 = x - this.max_radius;
+          x1 = x + this.max_radius;
+          y0 = y - this.max_radius;
+          y1 = y + this.max_radius;
+        }
+        candidates = (function() {
+          var _i, _len, _ref4, _results;
+          _ref4 = this.index.search([x0, y0, x1, y1]);
+          _results = [];
+          for (_i = 0, _len = _ref4.length; _i < _len; _i++) {
+            pt = _ref4[_i];
+            _results.push(pt[4].i);
+          }
+          return _results;
+        }).call(this);
+        candidates2 = [];
+        if (this.radius_units === "screen") {
+          sx = this.plot_view.view_state.vx_to_sx(vx);
+          sy = this.plot_view.view_state.vy_to_sy(vy);
+          for (_i = 0, _len = candidates.length; _i < _len; _i++) {
+            i = candidates[_i];
+            r2 = Math.pow(this.radius[i], 2);
+            dist = Math.pow(this.sx[i] - sx, 2) + Math.pow(this.sy[i] - sy, 2);
+            if (dist <= r2) {
+              candidates2.push([i, dist]);
+            }
+          }
+        } else {
+          for (_j = 0, _len1 = candidates.length; _j < _len1; _j++) {
+            i = candidates[_j];
+            r2 = Math.pow(this.radius[i], 2);
+            sx0 = this.plot_view.xmapper.map_to_target(x);
+            sx1 = this.plot_view.xmapper.map_to_target(this.x[i]);
+            sy0 = this.plot_view.ymapper.map_to_target(y);
+            sy1 = this.plot_view.ymapper.map_to_target(this.y[i]);
+            dist = Math.pow(sx0 - sx1, 2) + Math.pow(sy0 - sy1, 2);
+            if (dist <= r2) {
+              candidates2.push([i, dist]);
+            }
+          }
+        }
+        hits = [];
+        for (_k = 0, _len2 = candidates2.length; _k < _len2; _k++) {
+          _ref4 = candidates2[_k], i = _ref4[0], dist = _ref4[1];
+          sx = this.plot_view.view_state.vx_to_sx(vx);
+          sy = this.plot_view.view_state.vy_to_sy(vy);
+          angle = Math.atan2(sy - this.sy[i], sx - this.sx[i]);
+          if (mathutils.angle_between(-angle, -this.start_angle[i], -this.end_angle[i], this.direction[i])) {
+            hits.push([i, dist]);
+          }
+        }
+        hits = _.chain(hits).sortBy(function(elt) {
+          return elt[1];
+        }).map(function(elt) {
+          return elt[0];
+        }).value();
+        return hits;
       };
 
       WedgeView.prototype.draw_legend = function(ctx, x0, x1, y0, y1) {
@@ -21151,6 +22023,662 @@ if (typeof define === 'function' && define.amd) {
 
 /*
 //@ sourceMappingURL=glyph_factory.js.map
+*/;
+(function() {
+  var __hasProp = {}.hasOwnProperty,
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+  define('renderer/guide/axis',["underscore", "backbone", "common/safebind", "common/has_parent", "common/plot_widget", "renderer/properties"], function(_, Backbone, safebind, HasParent, PlotWidget, Properties) {
+    var Axis, AxisView, glyph_properties, line_properties, text_properties, _align_lookup, _align_lookup_negative, _align_lookup_positive, _angle_lookup, _baseline_lookup, _normal_lookup, _ref, _ref1;
+    glyph_properties = Properties.glyph_properties;
+    line_properties = Properties.line_properties;
+    text_properties = Properties.text_properties;
+    _angle_lookup = {
+      top: {
+        parallel: 0,
+        normal: -Math.PI / 2,
+        horizontal: 0,
+        vertical: -Math.PI / 2
+      },
+      bottom: {
+        parallel: 0,
+        normal: Math.PI / 2,
+        horizontal: 0,
+        vertical: Math.PI / 2
+      },
+      left: {
+        parallel: -Math.PI / 2,
+        normal: 0,
+        horizontal: 0,
+        vertical: -Math.PI / 2
+      },
+      right: {
+        parallel: Math.PI / 2,
+        normal: 0,
+        horizontal: 0,
+        vertical: Math.PI / 2
+      }
+    };
+    _baseline_lookup = {
+      top: {
+        parallel: 'alphabetic',
+        normal: 'middle',
+        horizontal: 'alphabetic',
+        vertical: 'middle'
+      },
+      bottom: {
+        parallel: 'hanging',
+        normal: 'middle',
+        horizontal: 'hanging',
+        vertical: 'middle'
+      },
+      left: {
+        parallel: 'alphabetic',
+        normal: 'middle',
+        horizontal: 'middle',
+        vertical: 'alphabetic'
+      },
+      right: {
+        parallel: 'alphabetic',
+        normal: 'middle',
+        horizontal: 'middle',
+        vertical: 'alphabetic'
+      }
+    };
+    _align_lookup = {
+      top: {
+        parallel: 'center',
+        normal: 'left',
+        horizontal: 'center',
+        vertical: 'left'
+      },
+      bottom: {
+        parallel: 'center',
+        normal: 'left',
+        horizontal: 'center',
+        vertical: 'right'
+      },
+      left: {
+        parallel: 'center',
+        normal: 'right',
+        horizontal: 'right',
+        vertical: 'center'
+      },
+      right: {
+        parallel: 'center',
+        normal: 'left',
+        horizontal: 'left',
+        vertical: 'center'
+      }
+    };
+    _align_lookup_negative = {
+      top: 'right',
+      bottom: 'left',
+      left: 'right',
+      right: 'left'
+    };
+    _align_lookup_positive = {
+      top: 'left',
+      bottom: 'right',
+      left: 'right',
+      right: 'left'
+    };
+    _normal_lookup = [
+      {
+        norm: {
+          norm: {
+            'min': +1,
+            'max': -1
+          },
+          flip: {
+            'min': -1,
+            'max': +1
+          }
+        },
+        flip: {
+          norm: {
+            'min': +1,
+            'max': -1
+          },
+          flip: {
+            'min': -1,
+            'max': +1
+          }
+        }
+      }, {
+        norm: {
+          norm: {
+            'min': -1,
+            'max': +1
+          },
+          flip: {
+            'min': -1,
+            'max': +1
+          }
+        },
+        flip: {
+          norm: {
+            'min': +1,
+            'max': -1
+          },
+          flip: {
+            'min': +1,
+            'max': -1
+          }
+        }
+      }
+    ];
+    AxisView = (function(_super) {
+      __extends(AxisView, _super);
+
+      function AxisView() {
+        _ref = AxisView.__super__.constructor.apply(this, arguments);
+        return _ref;
+      }
+
+      AxisView.prototype.initialize = function(options) {
+        AxisView.__super__.initialize.call(this, options);
+        this.rule_props = new line_properties(this, null, 'axis_');
+        this.major_tick_props = new line_properties(this, null, 'major_tick_');
+        this.major_label_props = new text_properties(this, null, 'major_label_');
+        this.axis_label_props = new text_properties(this, null, 'axis_label_');
+        return this.formatter = options.formatter;
+      };
+
+      AxisView.prototype.render = function() {
+        var ctx;
+        ctx = this.plot_view.ctx;
+        ctx.save();
+        this._draw_rule(ctx);
+        this._draw_major_ticks(ctx);
+        this._draw_major_labels(ctx);
+        this._draw_axis_label(ctx);
+        return ctx.restore();
+      };
+
+      AxisView.prototype.bind_bokeh_events = function() {
+        return safebind(this, this.model, 'change', this.request_render);
+      };
+
+      AxisView.prototype.padding_request = function() {
+        return this._padding_request();
+      };
+
+      AxisView.prototype._draw_rule = function(ctx) {
+        var coords, i, nx, ny, sx, sy, x, y, _i, _ref1, _ref2, _ref3, _ref4;
+        if (!this.rule_props.do_stroke) {
+          return;
+        }
+        _ref1 = coords = this.mget('rule_coords'), x = _ref1[0], y = _ref1[1];
+        _ref2 = this.plot_view.map_to_screen(x, "data", y, "data"), sx = _ref2[0], sy = _ref2[1];
+        _ref3 = this.mget('normals'), nx = _ref3[0], ny = _ref3[1];
+        this.rule_props.set(ctx, this);
+        ctx.beginPath();
+        ctx.moveTo(Math.round(sx[0]), Math.round(sy[0]));
+        for (i = _i = 1, _ref4 = sx.length; 1 <= _ref4 ? _i < _ref4 : _i > _ref4; i = 1 <= _ref4 ? ++_i : --_i) {
+          ctx.lineTo(Math.round(sx[i]), Math.round(sy[i]));
+        }
+        return ctx.stroke();
+      };
+
+      AxisView.prototype._draw_major_ticks = function(ctx) {
+        var coords, i, nx, ny, sx, sy, tin, tout, x, y, _i, _ref1, _ref2, _ref3, _ref4, _results;
+        if (!this.major_tick_props.do_stroke) {
+          return;
+        }
+        _ref1 = coords = this.mget('major_coords'), x = _ref1[0], y = _ref1[1];
+        _ref2 = this.plot_view.map_to_screen(x, "data", y, "data"), sx = _ref2[0], sy = _ref2[1];
+        _ref3 = this.mget('normals'), nx = _ref3[0], ny = _ref3[1];
+        tin = this.mget('major_tick_in');
+        tout = this.mget('major_tick_out');
+        this.major_tick_props.set(ctx, this);
+        _results = [];
+        for (i = _i = 0, _ref4 = sx.length; 0 <= _ref4 ? _i < _ref4 : _i > _ref4; i = 0 <= _ref4 ? ++_i : --_i) {
+          ctx.beginPath();
+          ctx.moveTo(Math.round(sx[i] + nx * tout), Math.round(sy[i] + ny * tout));
+          ctx.lineTo(Math.round(sx[i] - nx * tin), Math.round(sy[i] - ny * tin));
+          _results.push(ctx.stroke());
+        }
+        return _results;
+      };
+
+      AxisView.prototype._draw_major_labels = function(ctx) {
+        var angle, coords, dim, i, labels, nx, ny, orient, side, standoff, sx, sy, x, y, _i, _ref1, _ref2, _ref3, _ref4, _results;
+        _ref1 = coords = this.mget('major_coords'), x = _ref1[0], y = _ref1[1];
+        _ref2 = this.plot_view.map_to_screen(x, "data", y, "data"), sx = _ref2[0], sy = _ref2[1];
+        _ref3 = this.mget('normals'), nx = _ref3[0], ny = _ref3[1];
+        dim = this.mget('dimension');
+        side = this.mget('side');
+        orient = this.mget('major_label_orientation');
+        if (_.isString(orient)) {
+          angle = _angle_lookup[side][orient];
+        } else {
+          angle = -orient;
+        }
+        standoff = this._tick_extent() + this.mget('major_label_standoff');
+        labels = this.formatter.format(coords[dim]);
+        this.major_label_props.set(ctx, this);
+        this._apply_location_heuristics(ctx, side, orient);
+        _results = [];
+        for (i = _i = 0, _ref4 = sx.length; 0 <= _ref4 ? _i < _ref4 : _i > _ref4; i = 0 <= _ref4 ? ++_i : --_i) {
+          if (angle) {
+            ctx.translate(sx[i] + nx * standoff, sy[i] + ny * standoff);
+            ctx.rotate(angle);
+            ctx.fillText(labels[i], 0, 0);
+            ctx.rotate(-angle);
+            _results.push(ctx.translate(-sx[i] - nx * standoff, -sy[i] - ny * standoff));
+          } else {
+            _results.push(ctx.fillText(labels[i], Math.round(sx[i] + nx * standoff), Math.round(sy[i] + ny * standoff)));
+          }
+        }
+        return _results;
+      };
+
+      AxisView.prototype._draw_axis_label = function(ctx) {
+        var angle, label, nx, ny, orient, side, standoff, sx, sy, x, y, _ref1, _ref2, _ref3;
+        label = this.mget('axis_label');
+        if (label == null) {
+          return;
+        }
+        _ref1 = this.mget('rule_coords'), x = _ref1[0], y = _ref1[1];
+        _ref2 = this.plot_view.map_to_screen(x, "data", y, "data"), sx = _ref2[0], sy = _ref2[1];
+        _ref3 = this.mget('normals'), nx = _ref3[0], ny = _ref3[1];
+        side = this.mget('side');
+        orient = 'parallel';
+        angle = _angle_lookup[side][orient];
+        standoff = this._tick_extent() + this._tick_label_extent() + this.mget('axis_label_standoff');
+        sx = (sx[0] + sx[sx.length - 1]) / 2;
+        sy = (sy[0] + sy[sy.length - 1]) / 2;
+        this.axis_label_props.set(ctx, this);
+        this._apply_location_heuristics(ctx, side, orient);
+        if (angle) {
+          ctx.translate(sx + nx * standoff, sy + ny * standoff);
+          ctx.rotate(angle);
+          ctx.fillText(label, 0, 0);
+          ctx.rotate(-angle);
+          return ctx.translate(-sx - nx * standoff, -sy - ny * standoff);
+        } else {
+          return ctx.fillText(label, sx + nx * standoff, sy + ny * standoff);
+        }
+      };
+
+      AxisView.prototype._apply_location_heuristics = function(ctx, side, orient) {
+        var align, baseline;
+        if (_.isString(orient)) {
+          baseline = _baseline_lookup[side][orient];
+          align = _align_lookup[side][orient];
+        } else if (orient === 0) {
+          baseline = _baseline_lookup[side][orient];
+          align = _align_lookup[side][orient];
+        } else if (orient < 0) {
+          baseline = 'middle';
+          align = _align_lookup_negative[side];
+        } else if (orient > 0) {
+          baseline = 'middle';
+          align = _align_lookup_positive[side];
+        }
+        ctx.textBaseline = baseline;
+        return ctx.textAlign = align;
+      };
+
+      AxisView.prototype._tick_extent = function() {
+        return this.mget('major_tick_out');
+      };
+
+      AxisView.prototype._tick_label_extent = function() {
+        var angle, c, coords, dim, extent, factor, h, i, labels, orient, s, side, val, w, _i, _j, _ref1, _ref2;
+        extent = 0;
+        dim = this.mget('dimension');
+        coords = this.mget('major_coords');
+        side = this.mget('side');
+        orient = this.mget('major_label_orientation');
+        labels = this.formatter.format(coords[dim]);
+        this.major_label_props.set(this.plot_view.ctx, this);
+        if (_.isString(orient)) {
+          factor = 1;
+          angle = _angle_lookup[side][orient];
+        } else {
+          factor = 2;
+          angle = -orient;
+        }
+        angle = Math.abs(angle);
+        c = Math.cos(angle);
+        s = Math.sin(angle);
+        if (side === "top" || side === "bottom") {
+          for (i = _i = 0, _ref1 = labels.length; 0 <= _ref1 ? _i < _ref1 : _i > _ref1; i = 0 <= _ref1 ? ++_i : --_i) {
+            if (labels[i] == null) {
+              continue;
+            }
+            w = this.plot_view.ctx.measureText(labels[i]).width * 1.1;
+            h = this.plot_view.ctx.measureText(labels[i]).ascent * 0.9;
+            val = w * s + (h / factor) * c;
+            if (val > extent) {
+              extent = val;
+            }
+          }
+        } else {
+          for (i = _j = 0, _ref2 = labels.length; 0 <= _ref2 ? _j < _ref2 : _j > _ref2; i = 0 <= _ref2 ? ++_j : --_j) {
+            if (labels[i] == null) {
+              continue;
+            }
+            w = this.plot_view.ctx.measureText(labels[i]).width * 1.1;
+            h = this.plot_view.ctx.measureText(labels[i]).ascent * 0.9;
+            val = w * c + (h / factor) * s;
+            if (val > extent) {
+              extent = val;
+            }
+          }
+        }
+        if (extent > 0) {
+          extent += this.mget('major_label_standoff');
+        }
+        return extent;
+      };
+
+      AxisView.prototype._axis_label_extent = function() {
+        var angle, c, extent, h, orient, s, side, w;
+        extent = 0;
+        side = this.mget('side');
+        orient = 'parallel';
+        this.major_label_props.set(this.plot_view.ctx, this);
+        angle = Math.abs(_angle_lookup[side][orient]);
+        c = Math.cos(angle);
+        s = Math.sin(angle);
+        if (this.mget('axis_label')) {
+          extent += this.mget('axis_label_standoff');
+          this.axis_label_props.set(this.plot_view.ctx, this);
+          w = this.plot_view.ctx.measureText(this.mget('axis_label')).width * 1.1;
+          h = this.plot_view.ctx.measureText(this.mget('axis_label')).ascent * 0.9;
+          if (side === "top" || side === "bottom") {
+            extent += w * s + h * c;
+          } else {
+            extent += w * c + h * s;
+          }
+        }
+        return extent;
+      };
+
+      AxisView.prototype._padding_request = function() {
+        var loc, padding, req, side, _ref1;
+        req = {};
+        side = this.mget('side');
+        loc = (_ref1 = this.mget('location')) != null ? _ref1 : 'min';
+        if (!_.isString(loc)) {
+          return req;
+        }
+        padding = 0;
+        padding += this._tick_extent();
+        padding += this._tick_label_extent();
+        padding += this._axis_label_extent();
+        req[side] = padding;
+        return req;
+      };
+
+      return AxisView;
+
+    })(PlotWidget);
+    Axis = (function(_super) {
+      __extends(Axis, _super);
+
+      function Axis() {
+        _ref1 = Axis.__super__.constructor.apply(this, arguments);
+        return _ref1;
+      }
+
+      Axis.prototype.default_view = AxisView;
+
+      Axis.prototype.type = 'Axis';
+
+      Axis.prototype.initialize = function(attrs, options) {
+        Axis.__super__.initialize.call(this, attrs, options);
+        this.scale = options.scale;
+        this.register_property('computed_bounds', this._bounds, false);
+        this.add_dependencies('computed_bounds', this, ['bounds']);
+        this.register_property('rule_coords', this._rule_coords, false);
+        this.add_dependencies('rule_coords', this, ['computed_bounds', 'dimension', 'location']);
+        this.register_property('major_coords', this._major_coords, false);
+        this.add_dependencies('major_coords', this, ['computed_bounds', 'dimension', 'location']);
+        this.register_property('normals', this._normals, true);
+        this.add_dependencies('normals', this, ['computed_bounds', 'dimension', 'location']);
+        this.register_property('side', this._side, false);
+        this.add_dependencies('side', this, ['normals']);
+        return this.register_property('padding_request', this._padding_request, false);
+      };
+
+      Axis.prototype.dinitialize = function(attrs, options) {
+        return this.add_dependencies('computed_bounds', this.get_obj('plot'), ['x_range', 'y_range']);
+      };
+
+      Axis.prototype._bounds = function() {
+        var end, i, j, range_bounds, ranges, start, user_bounds, _ref2;
+        i = this.get('dimension');
+        j = (i + 1) % 2;
+        ranges = [this.get_obj('plot').get_obj('x_range'), this.get_obj('plot').get_obj('y_range')];
+        user_bounds = (_ref2 = this.get('bounds')) != null ? _ref2 : 'auto';
+        range_bounds = [ranges[i].get('min'), ranges[i].get('max')];
+        if (_.isArray(user_bounds)) {
+          if (Math.abs(user_bounds[0] - user_bounds[1]) > Math.abs(range_bounds[0] - range_bounds[1])) {
+            start = Math.max(Math.min(user_bounds[0], user_bounds[1]), range_bounds[0]);
+            end = Math.min(Math.max(user_bounds[0], user_bounds[1]), range_bounds[1]);
+          } else {
+            start = Math.min(user_bounds[0], user_bounds[1]);
+            end = Math.max(user_bounds[0], user_bounds[1]);
+          }
+        } else {
+          start = range_bounds[0], end = range_bounds[1];
+        }
+        return [start, end];
+      };
+
+      Axis.prototype._rule_coords = function() {
+        var cend, coords, cross_range, cstart, end, i, j, loc, range, ranges, start, xs, ys, _ref2, _ref3;
+        i = this.get('dimension');
+        j = (i + 1) % 2;
+        ranges = [this.get_obj('plot').get_obj('x_range'), this.get_obj('plot').get_obj('y_range')];
+        range = ranges[i];
+        cross_range = ranges[j];
+        _ref2 = this.get('computed_bounds'), start = _ref2[0], end = _ref2[1];
+        xs = new Array(2);
+        ys = new Array(2);
+        coords = [xs, ys];
+        cstart = cross_range.get('start');
+        cend = cross_range.get('end');
+        loc = (_ref3 = this.get('location')) != null ? _ref3 : 'min';
+        if (_.isString(loc)) {
+          if (loc === 'left' || loc === 'bottom') {
+            if (cstart < cend) {
+              loc = 'start';
+            } else {
+              loc = 'end';
+            }
+          } else if (loc === 'right' || loc === 'top') {
+            if (cstart < cend) {
+              loc = 'end';
+            } else {
+              loc = 'start';
+            }
+          }
+          loc = cross_range.get(loc);
+        }
+        coords[i][0] = Math.max(start, range.get('min'));
+        coords[i][1] = Math.min(end, range.get('max'));
+        if (coords[i][0] > coords[i][1]) {
+          coords[i][0] = coords[i][1] = NaN;
+        }
+        coords[j][0] = loc;
+        coords[j][1] = loc;
+        return coords;
+      };
+
+      Axis.prototype._major_coords = function() {
+        var cend, coords, cross_range, cstart, end, i, ii, j, loc, range, range_max, range_min, ranges, start, ticks, xs, ys, _i, _j, _ref2, _ref3, _ref4, _ref5, _ref6;
+        i = this.get('dimension');
+        j = (i + 1) % 2;
+        ranges = [this.get_obj('plot').get_obj('x_range'), this.get_obj('plot').get_obj('y_range')];
+        range = ranges[i];
+        cross_range = ranges[j];
+        _ref2 = this.get('computed_bounds'), start = _ref2[0], end = _ref2[1];
+        ticks = this.scale.get_ticks(start, end, range, {});
+        cstart = cross_range.get('start');
+        cend = cross_range.get('end');
+        loc = (_ref3 = this.get('location')) != null ? _ref3 : 'min';
+        if (_.isString(loc)) {
+          if (loc === 'left' || loc === 'bottom') {
+            if (cstart < cend) {
+              loc = 'start';
+            } else {
+              loc = 'end';
+            }
+          } else if (loc === 'right' || loc === 'top') {
+            if (cstart < cend) {
+              loc = 'end';
+            } else {
+              loc = 'start';
+            }
+          }
+          loc = cross_range.get(loc);
+        }
+        xs = [];
+        ys = [];
+        coords = [xs, ys];
+        if (range.type === "FactorRange") {
+          for (ii = _i = 0, _ref4 = ticks.length; 0 <= _ref4 ? _i < _ref4 : _i > _ref4; ii = 0 <= _ref4 ? ++_i : --_i) {
+            coords[i].push(ticks[ii]);
+            coords[j].push(loc);
+          }
+        } else {
+          _ref5 = [range.get('min'), range.get('max')], range_min = _ref5[0], range_max = _ref5[1];
+          for (ii = _j = 0, _ref6 = ticks.length; 0 <= _ref6 ? _j < _ref6 : _j > _ref6; ii = 0 <= _ref6 ? ++_j : --_j) {
+            if (ticks[ii] < range_min || ticks[ii] > range_max) {
+              continue;
+            }
+            coords[i].push(ticks[ii]);
+            coords[j].push(loc);
+          }
+        }
+        return coords;
+      };
+
+      Axis.prototype._normals = function() {
+        var cend, cross_range, cstart, end, i, idir, j, jdir, loc, normals, range, ranges, start, _ref2, _ref3;
+        i = this.get('dimension');
+        j = (i + 1) % 2;
+        ranges = [this.get_obj('plot').get_obj('x_range'), this.get_obj('plot').get_obj('y_range')];
+        range = ranges[i];
+        cross_range = ranges[j];
+        _ref2 = this.get('computed_bounds'), start = _ref2[0], end = _ref2[1];
+        cstart = cross_range.get('start');
+        cend = cross_range.get('end');
+        loc = (_ref3 = this.get('location')) != null ? _ref3 : 'min';
+        normals = [0, 0];
+        if (_.isString(loc)) {
+          if (start > end) {
+            idir = "flip";
+          } else {
+            idir = "norm";
+          }
+          if (cstart > cend) {
+            jdir = "flip";
+            if (loc === "left" || loc === "bottom") {
+              loc = "max";
+            } else if (loc === "top" || loc === "right") {
+              loc = "max";
+            }
+          } else {
+            jdir = "norm";
+            if (loc === "left" || loc === "bottom") {
+              loc = "min";
+            } else if (loc === "top" || loc === "right") {
+              loc = "max";
+            }
+          }
+          normals[j] = _normal_lookup[i][idir][jdir][loc];
+        } else {
+          if (i === 0) {
+            if (Math.abs(loc - cstart) <= Math.abs(loc - cend)) {
+              normals[j] = 1;
+            } else {
+              normals[j] = -1;
+            }
+          } else {
+            if (Math.abs(loc - cstart) <= Math.abs(loc - cend)) {
+              normals[j] = -1;
+            } else {
+              normals[j] = 1;
+            }
+          }
+        }
+        return normals;
+      };
+
+      Axis.prototype._side = function() {
+        var n, side;
+        n = this.get('normals');
+        if (n[1] === -1) {
+          side = 'top';
+        } else if (n[1] === 1) {
+          side = 'bottom';
+        } else if (n[0] === -1) {
+          side = 'left';
+        } else if (n[0] === 1) {
+          side = 'right';
+        }
+        return side;
+      };
+
+      Axis.prototype.display_defaults = function() {
+        return {
+          level: 'overlay',
+          axis_line_color: 'black',
+          axis_line_width: 1,
+          axis_line_alpha: 1.0,
+          axis_line_join: 'miter',
+          axis_line_cap: 'butt',
+          axis_line_dash: [],
+          axis_line_dash_offset: 0,
+          major_tick_in: 2,
+          major_tick_out: 6,
+          major_tick_line_color: 'black',
+          major_tick_line_width: 1,
+          major_tick_line_alpha: 1.0,
+          major_tick_line_join: 'miter',
+          major_tick_line_cap: 'butt',
+          major_tick_line_dash: [],
+          major_tick_line_dash_offset: 0,
+          major_label_standoff: 5,
+          major_label_orientation: "horizontal",
+          major_label_text_font: "helvetica",
+          major_label_text_font_size: "10pt",
+          major_label_text_font_style: "normal",
+          major_label_text_color: "#444444",
+          major_label_text_alpha: 1.0,
+          major_label_text_align: "center",
+          major_label_text_baseline: "alphabetic",
+          axis_label: "",
+          axis_label_standoff: 5,
+          axis_label_text_font: "helvetica",
+          axis_label_text_font_size: "16pt",
+          axis_label_text_font_style: "normal",
+          axis_label_text_color: "#444444",
+          axis_label_text_alpha: 1.0,
+          axis_label_text_align: "center",
+          axis_label_text_baseline: "alphabetic"
+        };
+      };
+
+      return Axis;
+
+    })(HasParent);
+    return {
+      "Model": Axis,
+      "View": AxisView
+    };
+  });
+
+}).call(this);
+
+/*
+//@ sourceMappingURL=axis.js.map
 */;
 !function (definition) {
   if (typeof module == "object" && module.exports) module.exports = definition();
@@ -21803,7 +23331,9 @@ define("sprintf", (function (global) {
         this.toString_properties = toString_properties != null ? toString_properties : [];
       }
 
-      AbstractScale.prototype.get_ticks = function(data_low, data_high, desired_n_ticks) {
+      AbstractScale.prototype.get_ticks = function(data_low, data_high, range, _arg) {
+        var desired_n_ticks;
+        desired_n_ticks = _arg.desired_n_ticks;
         if (desired_n_ticks == null) {
           desired_n_ticks = DEFAULT_DESIRED_N_TICKS;
         }
@@ -22381,602 +23911,112 @@ define("sprintf", (function (global) {
   var __hasProp = {}.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
-  define('renderer/guide/linear_axis',["underscore", "backbone", "common/safebind", "common/has_parent", "common/ticking", "common/plot_widget", "renderer/properties"], function(_, Backbone, safebind, HasParent, ticking, PlotWidget, Properties) {
-    var LinearAxes, LinearAxis, LinearAxisView, glyph_properties, line_properties, signum, text_properties, _align_lookup, _angle_lookup, _baseline_lookup, _ref, _ref1, _ref2;
-    glyph_properties = Properties.glyph_properties;
-    line_properties = Properties.line_properties;
-    text_properties = Properties.text_properties;
-    signum = function(x) {
-      var _ref;
-      return (_ref = x != null ? x : x < 0) != null ? _ref : -{
-        1: {
-          1: 0
-        }
-      };
-    };
-    _angle_lookup = {
-      top: {
-        parallel: 0,
-        normal: -Math.PI / 2,
-        horizontal: 0,
-        vertical: -Math.PI / 2
-      },
-      bottom: {
-        parallel: 0,
-        normal: Math.PI / 2,
-        horizontal: 0,
-        vertical: Math.PI / 2
-      },
-      left: {
-        parallel: -Math.PI / 2,
-        normal: 0,
-        horizontal: 0,
-        vertical: -Math.PI / 2
-      },
-      right: {
-        parallel: Math.PI / 2,
-        normal: 0,
-        horizontal: 0,
-        vertical: Math.PI / 2
-      }
-    };
-    _baseline_lookup = {
-      top: {
-        parallel: 'alphabetic',
-        normal: 'middle',
-        horizontal: 'alphabetic',
-        vertical: 'middle'
-      },
-      bottom: {
-        parallel: 'hanging',
-        normal: 'middle',
-        horizontal: 'hanging',
-        vertical: 'middle'
-      },
-      left: {
-        parallel: 'alphabetic',
-        normal: 'middle',
-        horizontal: 'middle',
-        vertical: 'alphabetic'
-      },
-      right: {
-        parallel: 'alphabetic',
-        normal: 'middle',
-        horizontal: 'middle',
-        vertical: 'alphabetic'
-      }
-    };
-    _align_lookup = {
-      top: {
-        parallel: 'center',
-        normal: 'left',
-        horizontal: 'center',
-        vertical: 'left'
-      },
-      bottom: {
-        parallel: 'center',
-        normal: 'left',
-        horizontal: 'center',
-        vertical: 'right'
-      },
-      left: {
-        parallel: 'center',
-        normal: 'right',
-        horizontal: 'right',
-        vertical: 'center'
-      },
-      right: {
-        parallel: 'center',
-        normal: 'left',
-        horizontal: 'left',
-        vertical: 'center'
-      }
-    };
-    LinearAxisView = (function(_super) {
-      __extends(LinearAxisView, _super);
+  define('renderer/guide/categorical_axis',["backbone", "./axis", "common/ticking", "range/factor_range"], function(Backbone, Axis, ticking, FactorRange) {
+    var CategoricalAxes, CategoricalAxis, CategoricalAxisView, _CategoricalFormatter, _CategoricalScale, _ref, _ref1, _ref2;
+    _CategoricalFormatter = (function() {
+      function _CategoricalFormatter() {}
 
-      function LinearAxisView() {
-        _ref = LinearAxisView.__super__.constructor.apply(this, arguments);
+      _CategoricalFormatter.prototype.format = function(ticks) {
+        return ticks;
+      };
+
+      return _CategoricalFormatter;
+
+    })();
+    _CategoricalScale = (function() {
+      function _CategoricalScale() {}
+
+      _CategoricalScale.prototype.get_ticks = function(start, end, range, _arg) {
+        var desired_n_ticks;
+        desired_n_ticks = _arg.desired_n_ticks;
+        return range.get("factors");
+      };
+
+      return _CategoricalScale;
+
+    })();
+    CategoricalAxisView = (function(_super) {
+      __extends(CategoricalAxisView, _super);
+
+      function CategoricalAxisView() {
+        _ref = CategoricalAxisView.__super__.constructor.apply(this, arguments);
         return _ref;
       }
 
-      LinearAxisView.prototype.initialize = function(attrs, options) {
-        LinearAxisView.__super__.initialize.call(this, attrs, options);
-        this.rule_props = new line_properties(this, null, 'axis_');
-        this.major_tick_props = new line_properties(this, null, 'major_tick_');
-        this.major_label_props = new text_properties(this, null, 'major_label_');
-        this.axis_label_props = new text_properties(this, null, 'axis_label_');
-        return this.formatter = new ticking.BasicTickFormatter();
+      CategoricalAxisView.prototype.initialize = function(attrs, options) {
+        CategoricalAxisView.__super__.initialize.call(this, attrs, options);
+        return this.formatter = new _CategoricalFormatter();
       };
 
-      LinearAxisView.prototype.render = function() {
-        var ctx;
-        ctx = this.plot_view.ctx;
-        ctx.save();
-        this._draw_rule(ctx);
-        this._draw_major_ticks(ctx);
-        this._draw_major_labels(ctx);
-        this._draw_axis_label(ctx);
-        return ctx.restore();
-      };
+      return CategoricalAxisView;
 
-      LinearAxisView.prototype.bind_bokeh_events = function() {
-        return safebind(this, this.model, 'change', this.request_render);
-      };
+    })(Axis.View);
+    CategoricalAxis = (function(_super) {
+      __extends(CategoricalAxis, _super);
 
-      LinearAxisView.prototype.padding_request = function() {
-        return this._padding_request();
-      };
-
-      LinearAxisView.prototype._draw_rule = function(ctx) {
-        var coords, i, sx, sy, x, y, _i, _ref1, _ref2, _ref3;
-        if (!this.rule_props.do_stroke) {
-          return;
-        }
-        _ref1 = coords = this.mget('rule_coords'), x = _ref1[0], y = _ref1[1];
-        _ref2 = this.plot_view.map_to_screen(x, "data", y, "data"), sx = _ref2[0], sy = _ref2[1];
-        this.rule_props.set(ctx, this);
-        ctx.beginPath();
-        ctx.moveTo(Math.round(sx[0]), Math.round(sy[0]));
-        for (i = _i = 1, _ref3 = sx.length; 1 <= _ref3 ? _i < _ref3 : _i > _ref3; i = 1 <= _ref3 ? ++_i : --_i) {
-          ctx.lineTo(Math.round(sx[i]), Math.round(sy[i]));
-        }
-        ctx.stroke();
-      };
-
-      LinearAxisView.prototype._draw_major_ticks = function(ctx) {
-        var coords, i, nx, ny, sx, sy, tin, tout, x, y, _i, _ref1, _ref2, _ref3, _ref4;
-        if (!this.major_tick_props.do_stroke) {
-          return;
-        }
-        _ref1 = coords = this.mget('major_coords'), x = _ref1[0], y = _ref1[1];
-        _ref2 = this.plot_view.map_to_screen(x, "data", y, "data"), sx = _ref2[0], sy = _ref2[1];
-        _ref3 = this.mget('normals'), nx = _ref3[0], ny = _ref3[1];
-        tin = this.mget('major_tick_in');
-        tout = this.mget('major_tick_out');
-        this.major_tick_props.set(ctx, this);
-        for (i = _i = 0, _ref4 = sx.length; 0 <= _ref4 ? _i < _ref4 : _i > _ref4; i = 0 <= _ref4 ? ++_i : --_i) {
-          ctx.beginPath();
-          ctx.moveTo(Math.round(sx[i] + nx * tout), Math.round(sy[i] + ny * tout));
-          ctx.lineTo(Math.round(sx[i] - nx * tin), Math.round(sy[i] - ny * tin));
-          ctx.stroke();
-        }
-      };
-
-      LinearAxisView.prototype._draw_major_labels = function(ctx) {
-        var angle, coords, dim, i, labels, nx, ny, orient, side, standoff, sx, sy, x, y, _i, _ref1, _ref2, _ref3, _ref4;
-        _ref1 = coords = this.mget('major_coords'), x = _ref1[0], y = _ref1[1];
-        _ref2 = this.plot_view.map_to_screen(x, "data", y, "data"), sx = _ref2[0], sy = _ref2[1];
-        _ref3 = this.mget('normals'), nx = _ref3[0], ny = _ref3[1];
-        dim = this.mget('dimension');
-        side = this.mget('side');
-        orient = this.mget('major_label_orientation');
-        if (_.isString(orient)) {
-          angle = _angle_lookup[side][orient];
-        } else {
-          angle = -orient;
-        }
-        standoff = this._tick_extent() + this.mget('major_label_standoff');
-        labels = this.formatter.format(coords[dim]);
-        this.major_label_props.set(ctx, this);
-        this._apply_location_heuristics(ctx, side, orient);
-        for (i = _i = 0, _ref4 = sx.length; 0 <= _ref4 ? _i < _ref4 : _i > _ref4; i = 0 <= _ref4 ? ++_i : --_i) {
-          if (angle) {
-            ctx.translate(sx[i] + nx * standoff, sy[i] + ny * standoff);
-            ctx.rotate(angle);
-            ctx.fillText(labels[i], 0, 0);
-            ctx.rotate(-angle);
-            ctx.translate(-sx[i] - nx * standoff, -sy[i] - ny * standoff);
-          } else {
-            ctx.fillText(labels[i], Math.round(sx[i] + nx * standoff), Math.round(sy[i] + ny * standoff));
-          }
-        }
-      };
-
-      LinearAxisView.prototype._draw_axis_label = function(ctx) {
-        var angle, label, nx, ny, orient, side, standoff, sx, sy, x, y, _ref1, _ref2, _ref3;
-        label = this.mget('axis_label');
-        if (label == null) {
-          return;
-        }
-        _ref1 = this.mget('rule_coords'), x = _ref1[0], y = _ref1[1];
-        _ref2 = this.plot_view.map_to_screen(x, "data", y, "data"), sx = _ref2[0], sy = _ref2[1];
-        _ref3 = this.mget('normals'), nx = _ref3[0], ny = _ref3[1];
-        side = this.mget('side');
-        orient = 'parallel';
-        angle = _angle_lookup[side][orient];
-        standoff = this._tick_extent() + this._tick_label_extent() + this.mget('axis_label_standoff');
-        sx = (sx[0] + sx[sx.length - 1]) / 2;
-        sy = (sy[0] + sy[sy.length - 1]) / 2;
-        this.axis_label_props.set(ctx, this);
-        this._apply_location_heuristics(ctx, side, orient);
-        if (angle) {
-          ctx.translate(sx + nx * standoff, sy + ny * standoff);
-          ctx.rotate(angle);
-          ctx.fillText(label, 0, 0);
-          ctx.rotate(-angle);
-          ctx.translate(-sx - nx * standoff, -sy - ny * standoff);
-        } else {
-          ctx.fillText(label, sx + nx * standoff, sy + ny * standoff);
-        }
-      };
-
-      LinearAxisView.prototype._apply_location_heuristics = function(ctx, side, orient) {
-        var align, baseline;
-        if (_.isString(orient)) {
-          baseline = _baseline_lookup[side][orient];
-          align = _align_lookup[side][orient];
-        } else if (orient === 0) {
-          baseline = _baseline_lookup[side][orient];
-          align = _align_lookup[side][orient];
-        } else if (orient < 0) {
-          baseline = 'middle';
-          if (side === 'top') {
-            align = 'right';
-          } else if (side === 'bottom') {
-            align = 'left';
-          } else if (side === 'left') {
-            align = 'right';
-          } else if (side === 'right') {
-            align = 'left';
-          }
-        } else if (orient > 0) {
-          baseline = 'middle';
-          if (side === 'top') {
-            align = 'left';
-          } else if (side === 'bottom') {
-            align = 'right';
-          } else if (side === 'left') {
-            align = 'right';
-          } else if (side === 'right') {
-            align = 'left';
-          }
-        }
-        ctx.textBaseline = baseline;
-        return ctx.textAlign = align;
-      };
-
-      LinearAxisView.prototype._tick_extent = function() {
-        return this.mget('major_tick_out');
-      };
-
-      LinearAxisView.prototype._tick_label_extent = function() {
-        var angle, c, coords, dim, extent, factor, h, i, labels, orient, s, side, val, w, _i, _j, _ref1, _ref2;
-        extent = 0;
-        dim = this.mget('dimension');
-        coords = this.mget('major_coords');
-        side = this.mget('side');
-        orient = this.mget('major_label_orientation');
-        labels = this.formatter.format(coords[dim]);
-        this.major_label_props.set(this.plot_view.ctx, this);
-        if (_.isString(orient)) {
-          factor = 1;
-          angle = _angle_lookup[side][orient];
-        } else {
-          factor = 2;
-          angle = -orient;
-        }
-        angle = Math.abs(angle);
-        c = Math.cos(angle);
-        s = Math.sin(angle);
-        if (side === "top" || side === "bottom") {
-          for (i = _i = 0, _ref1 = labels.length; 0 <= _ref1 ? _i < _ref1 : _i > _ref1; i = 0 <= _ref1 ? ++_i : --_i) {
-            if (labels[i] == null) {
-              continue;
-            }
-            w = this.plot_view.ctx.measureText(labels[i]).width * 1.1;
-            h = this.plot_view.ctx.measureText(labels[i]).ascent * 0.9;
-            val = w * s + (h / factor) * c;
-            if (val > extent) {
-              extent = val;
-            }
-          }
-        } else {
-          for (i = _j = 0, _ref2 = labels.length; 0 <= _ref2 ? _j < _ref2 : _j > _ref2; i = 0 <= _ref2 ? ++_j : --_j) {
-            if (labels[i] == null) {
-              continue;
-            }
-            w = this.plot_view.ctx.measureText(labels[i]).width * 1.1;
-            h = this.plot_view.ctx.measureText(labels[i]).ascent * 0.9;
-            val = w * c + (h / factor) * s;
-            if (val > extent) {
-              extent = val;
-            }
-          }
-        }
-        if (extent > 0) {
-          extent += this.mget('major_label_standoff');
-        }
-        return extent;
-      };
-
-      LinearAxisView.prototype._axis_label_extent = function() {
-        var angle, c, extent, h, orient, s, side, w;
-        extent = 0;
-        side = this.mget('side');
-        orient = 'parallel';
-        this.major_label_props.set(this.plot_view.ctx, this);
-        angle = Math.abs(_angle_lookup[side][orient]);
-        c = Math.cos(angle);
-        s = Math.sin(angle);
-        if (this.mget('axis_label')) {
-          extent += this.mget('axis_label_standoff');
-          this.axis_label_props.set(this.plot_view.ctx, this);
-          w = this.plot_view.ctx.measureText(this.mget('axis_label')).width * 1.1;
-          h = this.plot_view.ctx.measureText(this.mget('axis_label')).ascent * 0.9;
-          if (side === "top" || side === "bottom") {
-            extent += w * s + h * c;
-          } else {
-            extent += w * c + h * s;
-          }
-        }
-        return extent;
-      };
-
-      LinearAxisView.prototype._padding_request = function() {
-        var loc, padding, req, side, _ref1;
-        req = {};
-        side = this.mget('side');
-        loc = (_ref1 = this.mget('location')) != null ? _ref1 : 'min';
-        if (!_.isString(loc)) {
-          return req;
-        }
-        padding = 0;
-        padding += this._tick_extent();
-        padding += this._tick_label_extent();
-        padding += this._axis_label_extent();
-        req[side] = padding;
-        return req;
-      };
-
-      return LinearAxisView;
-
-    })(PlotWidget);
-    LinearAxis = (function(_super) {
-      __extends(LinearAxis, _super);
-
-      function LinearAxis() {
-        _ref1 = LinearAxis.__super__.constructor.apply(this, arguments);
+      function CategoricalAxis() {
+        _ref1 = CategoricalAxis.__super__.constructor.apply(this, arguments);
         return _ref1;
       }
 
-      LinearAxis.prototype.default_view = LinearAxisView;
+      CategoricalAxis.prototype.default_view = CategoricalAxisView;
 
-      LinearAxis.prototype.type = 'LinearAxis';
+      CategoricalAxis.prototype.type = 'CategoricalAxis';
 
-      LinearAxis.prototype.initialize = function(attrs, options) {
-        LinearAxis.__super__.initialize.call(this, attrs, options);
-        this.register_property('computed_bounds', this._bounds, false);
-        this.add_dependencies('computed_bounds', this, ['bounds']);
-        this.register_property('rule_coords', this._rule_coords, false);
-        this.add_dependencies('rule_coords', this, ['computed_bounds', 'dimension', 'location']);
-        this.register_property('major_coords', this._major_coords, false);
-        this.add_dependencies('major_coords', this, ['computed_bounds', 'dimension', 'location']);
-        this.register_property('normals', this._normals, false);
-        this.add_dependencies('normals', this, ['computed_bounds', 'dimension', 'location']);
-        this.register_property('side', this._side, false);
-        this.add_dependencies('side', this, ['normals']);
-        this.register_property('padding_request', this._padding_request, false);
-        return this.scale = new ticking.BasicScale();
+      CategoricalAxis.prototype.initialize = function(attrs, options) {
+        options.scale = new _CategoricalScale();
+        return CategoricalAxis.__super__.initialize.call(this, attrs, options);
       };
 
-      LinearAxis.prototype.dinitialize = function(attrs, options) {
-        return this.add_dependencies('computed_bounds', this.get_obj('plot'), ['x_range', 'y_range']);
-      };
-
-      LinearAxis.prototype._bounds = function() {
-        var end, i, j, range_bounds, ranges, start, user_bounds, _ref2;
+      CategoricalAxis.prototype._bounds = function() {
+        var i, range_bounds, ranges, user_bounds, _ref2;
         i = this.get('dimension');
-        j = (i + 1) % 2;
         ranges = [this.get_obj('plot').get_obj('x_range'), this.get_obj('plot').get_obj('y_range')];
         user_bounds = (_ref2 = this.get('bounds')) != null ? _ref2 : 'auto';
+        if (user_bounds !== 'auto') {
+          console.log("Categorical Axes only support user_bounds='auto', ignoring");
+        }
         range_bounds = [ranges[i].get('min'), ranges[i].get('max')];
-        if (_.isArray(user_bounds)) {
-          if (Math.abs(user_bounds[0] - user_bounds[1]) > Math.abs(range_bounds[0] - range_bounds[1])) {
-            start = Math.max(Math.min(user_bounds[0], user_bounds[1]), range_bounds[0]);
-            end = Math.min(Math.max(user_bounds[0], user_bounds[1]), range_bounds[1]);
-          } else {
-            start = Math.min(user_bounds[0], user_bounds[1]);
-            end = Math.max(user_bounds[0], user_bounds[1]);
-          }
-        } else {
-          start = range_bounds[0], end = range_bounds[1];
-        }
-        return [start, end];
+        return range_bounds;
       };
 
-      LinearAxis.prototype._rule_coords = function() {
-        var coords, cross_range, end, i, j, loc, range, range_max, range_min, ranges, start, xs, ys, _ref2, _ref3, _ref4;
-        i = this.get('dimension');
-        j = (i + 1) % 2;
-        ranges = [this.get_obj('plot').get_obj('x_range'), this.get_obj('plot').get_obj('y_range')];
-        range = ranges[i];
-        cross_range = ranges[j];
-        _ref2 = this.get('computed_bounds'), start = _ref2[0], end = _ref2[1];
-        xs = new Float64Array(2);
-        ys = new Float64Array(2);
-        coords = [xs, ys];
-        loc = (_ref3 = this.get('location')) != null ? _ref3 : 'min';
-        if (_.isString(loc)) {
-          if (loc === 'left' || loc === 'bottom') {
-            loc = 'start';
-          } else if (loc === 'right' || loc === 'top') {
-            loc = 'end';
-          }
-          loc = cross_range.get(loc);
-        }
-        _ref4 = [range.get('min'), range.get('max')], range_min = _ref4[0], range_max = _ref4[1];
-        coords[i][0] = Math.max(start, range_min);
-        coords[i][1] = Math.min(end, range_max);
-        coords[j][0] = loc;
-        coords[j][1] = loc;
-        if (coords[i][0] > coords[i][1]) {
-          coords[i][0] = coords[i][1] = NaN;
-        }
-        return coords;
+      CategoricalAxis.prototype.display_defaults = function() {
+        return CategoricalAxis.__super__.display_defaults.call(this);
       };
 
-      LinearAxis.prototype._major_coords = function() {
-        var coords, cross_range, end, i, ii, j, loc, range, range_max, range_min, ranges, start, ticks, xs, ys, _i, _ref2, _ref3, _ref4, _ref5;
-        i = this.get('dimension');
-        j = (i + 1) % 2;
-        ranges = [this.get_obj('plot').get_obj('x_range'), this.get_obj('plot').get_obj('y_range')];
-        range = ranges[i];
-        cross_range = ranges[j];
-        _ref2 = this.get('computed_bounds'), start = _ref2[0], end = _ref2[1];
-        ticks = this.scale.get_ticks(start, end);
-        loc = (_ref3 = this.get('location')) != null ? _ref3 : 'min';
-        if (_.isString(loc)) {
-          if (loc === 'left' || loc === 'bottom') {
-            loc = 'start';
-          } else if (loc === 'right' || loc === 'top') {
-            loc = 'end';
-          }
-          loc = cross_range.get(loc);
-        }
-        xs = [];
-        ys = [];
-        coords = [xs, ys];
-        _ref4 = [range.get('min'), range.get('max')], range_min = _ref4[0], range_max = _ref4[1];
-        for (ii = _i = 0, _ref5 = ticks.length; 0 <= _ref5 ? _i < _ref5 : _i > _ref5; ii = 0 <= _ref5 ? ++_i : --_i) {
-          if (ticks[ii] < range_min || ticks[ii] > range_max) {
-            continue;
-          }
-          coords[i].push(ticks[ii]);
-          coords[j].push(loc);
-        }
-        return coords;
-      };
+      return CategoricalAxis;
 
-      LinearAxis.prototype._normals = function() {
-        var cend, cross_range, cstart, end, i, j, loc, normals, range, ranges, start, _ref2, _ref3;
-        i = this.get('dimension');
-        j = (i + 1) % 2;
-        ranges = [this.get_obj('plot').get_obj('x_range'), this.get_obj('plot').get_obj('y_range')];
-        range = ranges[i];
-        cross_range = ranges[j];
-        _ref2 = this.get('computed_bounds'), start = _ref2[0], end = _ref2[1];
-        loc = (_ref3 = this.get('location')) != null ? _ref3 : 'min';
-        cstart = cross_range.get('start');
-        cend = cross_range.get('end');
-        normals = [0, 0];
-        if (_.isString(loc)) {
-          normals[j] = (end - start) < 0 ? -1 : 1;
-          if (i === 0) {
-            if ((loc === 'max' && (cstart < cend)) || (loc === 'min' && (cstart > cend)) || loc === 'right' || loc === 'top') {
-              normals[j] *= -1;
-            }
-          } else if (i === 1) {
-            if ((loc === 'min' && (cstart < cend)) || (loc === 'max' && (cstart > cend)) || loc === 'left' || loc === 'bottom') {
-              normals[j] *= -1;
-            }
-          }
-        } else {
-          if (i === 0) {
-            if (Math.abs(loc - cstart) <= Math.abs(loc - cend)) {
-              normals[j] = 1;
-            } else {
-              normals[j] = -1;
-            }
-          } else {
-            if (Math.abs(loc - cstart) <= Math.abs(loc - cend)) {
-              normals[j] = -1;
-            } else {
-              normals[j] = 1;
-            }
-          }
-        }
-        return normals;
-      };
+    })(Axis.Model);
+    CategoricalAxes = (function(_super) {
+      __extends(CategoricalAxes, _super);
 
-      LinearAxis.prototype._side = function() {
-        var n, side;
-        n = this.get('normals');
-        if (n[1] === -1) {
-          side = 'top';
-        } else if (n[1] === 1) {
-          side = 'bottom';
-        } else if (n[0] === -1) {
-          side = 'left';
-        } else if (n[0] === 1) {
-          side = 'right';
-        }
-        return side;
-      };
-
-      LinearAxis.prototype.display_defaults = function() {
-        return {
-          level: 'overlay',
-          axis_line_color: 'black',
-          axis_line_width: 1,
-          axis_line_alpha: 1.0,
-          axis_line_join: 'miter',
-          axis_line_cap: 'butt',
-          axis_line_dash: [],
-          axis_line_dash_offset: 0,
-          major_tick_in: 2,
-          major_tick_out: 6,
-          major_tick_line_color: 'black',
-          major_tick_line_width: 1,
-          major_tick_line_alpha: 1.0,
-          major_tick_line_join: 'miter',
-          major_tick_line_cap: 'butt',
-          major_tick_line_dash: [],
-          major_tick_line_dash_offset: 0,
-          major_label_standoff: 5,
-          major_label_orientation: "horizontal",
-          major_label_text_font: "helvetica",
-          major_label_text_font_size: "10pt",
-          major_label_text_font_style: "normal",
-          major_label_text_color: "#444444",
-          major_label_text_alpha: 1.0,
-          major_label_text_align: "center",
-          major_label_text_baseline: "alphabetic",
-          axis_label: "",
-          axis_label_standoff: 5,
-          axis_label_text_font: "helvetica",
-          axis_label_text_font_size: "16pt",
-          axis_label_text_font_style: "normal",
-          axis_label_text_color: "#444444",
-          axis_label_text_alpha: 1.0,
-          axis_label_text_align: "center",
-          axis_label_text_baseline: "alphabetic"
-        };
-      };
-
-      return LinearAxis;
-
-    })(HasParent);
-    LinearAxes = (function(_super) {
-      __extends(LinearAxes, _super);
-
-      function LinearAxes() {
-        _ref2 = LinearAxes.__super__.constructor.apply(this, arguments);
+      function CategoricalAxes() {
+        _ref2 = CategoricalAxes.__super__.constructor.apply(this, arguments);
         return _ref2;
       }
 
-      LinearAxes.prototype.model = LinearAxis;
+      CategoricalAxes.prototype.model = CategoricalAxis;
 
-      return LinearAxes;
+      return CategoricalAxes;
 
     })(Backbone.Collection);
     return {
-      "Model": LinearAxis,
-      "Collection": new LinearAxes(),
-      "View": LinearAxisView
+      "Model": CategoricalAxis,
+      "Collection": new CategoricalAxes(),
+      "View": CategoricalAxisView
     };
   });
 
 }).call(this);
 
 /*
-//@ sourceMappingURL=linear_axis.js.map
+//@ sourceMappingURL=categorical_axis.js.map
 */;
 (function() {
   var __hasProp = {}.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
-  define('renderer/guide/datetime_axis',["backbone", "./linear_axis", "common/ticking"], function(Backbone, LinearAxis, ticking) {
+  define('renderer/guide/datetime_axis',["backbone", "./axis", "common/ticking"], function(Backbone, Axis, ticking) {
     var DatetimeAxes, DatetimeAxis, DatetimeAxisView, _ref, _ref1, _ref2;
     DatetimeAxisView = (function(_super) {
       __extends(DatetimeAxisView, _super);
@@ -22986,14 +24026,14 @@ define("sprintf", (function (global) {
         return _ref;
       }
 
-      DatetimeAxisView.prototype.initialize = function(attrs, options) {
-        DatetimeAxisView.__super__.initialize.call(this, attrs, options);
-        return this.formatter = new ticking.DatetimeFormatter();
+      DatetimeAxisView.prototype.initialize = function(options) {
+        options.formatter = new ticking.DatetimeFormatter();
+        return DatetimeAxisView.__super__.initialize.call(this, options);
       };
 
       return DatetimeAxisView;
 
-    })(LinearAxis.View);
+    })(Axis.View);
     DatetimeAxis = (function(_super) {
       __extends(DatetimeAxis, _super);
 
@@ -23007,13 +24047,17 @@ define("sprintf", (function (global) {
       DatetimeAxis.prototype.type = 'DatetimeAxis';
 
       DatetimeAxis.prototype.initialize = function(attrs, options) {
-        DatetimeAxis.__super__.initialize.call(this, attrs, options);
-        return this.scale = new ticking.DatetimeScale();
+        options.scale = new ticking.DatetimeScale();
+        return DatetimeAxis.__super__.initialize.call(this, attrs, options);
+      };
+
+      DatetimeAxis.prototype.display_defaults = function() {
+        return DatetimeAxis.__super__.display_defaults.call(this);
       };
 
       return DatetimeAxis;
 
-    })(LinearAxis.Model);
+    })(Axis.Model);
     DatetimeAxes = (function(_super) {
       __extends(DatetimeAxes, _super);
 
@@ -23161,7 +24205,7 @@ define("sprintf", (function (global) {
         tmp = Math.min(start, end);
         end = Math.max(start, end);
         start = tmp;
-        ticks = this.get('scale').get_ticks(start, end);
+        ticks = this.get('scale').get_ticks(start, end, range, {});
         min = range.get('min');
         max = range.get('max');
         cmin = cross_range.get('min');
@@ -23227,233 +24271,75 @@ define("sprintf", (function (global) {
 //@ sourceMappingURL=grid.js.map
 */;
 (function() {
-  define('common/textutils',[], function() {
-    var cache, getTextHeight;
-    cache = {};
-    getTextHeight = function(font) {
-      var block, body, div, result, text;
-      if (cache[font] != null) {
-        return cache[font];
-      }
-      text = $('<span>Hg</span>').css({
-        font: font
-      });
-      block = $('<div style="display: inline-block; width: 1px; height: 0px;"></div>');
-      div = $('<div></div>');
-      div.append(text, block);
-      body = $('body');
-      body.append(div);
-      try {
-        result = {};
-        block.css({
-          verticalAlign: 'baseline'
-        });
-        result.ascent = block.offset().top - text.offset().top;
-        block.css({
-          verticalAlign: 'bottom'
-        });
-        result.height = block.offset().top - text.offset().top;
-        result.descent = result.height - result.ascent;
-      } finally {
-        div.remove();
-      }
-      cache[font] = result;
-      return result;
-    };
-    return {
-      "getTextHeight": getTextHeight
-    };
-  });
-
-}).call(this);
-
-/*
-//@ sourceMappingURL=textutils.js.map
-*/;
-(function() {
   var __hasProp = {}.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
-  define('renderer/annotation/legend',["underscore", "common/has_parent", "common/plot_widget", "common/textutils", "renderer/properties"], function(_, HasParent, PlotWidget, textutils, Properties) {
-    var Legend, LegendView, Legends, glyph_properties, line_properties, text_properties, _ref, _ref1, _ref2;
-    glyph_properties = Properties.glyph_properties;
-    line_properties = Properties.line_properties;
-    text_properties = Properties.text_properties;
-    LegendView = (function(_super) {
-      __extends(LegendView, _super);
+  define('renderer/guide/linear_axis',["underscore", "backbone", "common/ticking", "./axis"], function(_, Backbone, ticking, Axis) {
+    var LinearAxes, LinearAxis, LinearAxisView, _ref, _ref1, _ref2;
+    LinearAxisView = (function(_super) {
+      __extends(LinearAxisView, _super);
 
-      function LegendView() {
-        _ref = LegendView.__super__.constructor.apply(this, arguments);
+      function LinearAxisView() {
+        _ref = LinearAxisView.__super__.constructor.apply(this, arguments);
         return _ref;
       }
 
-      LegendView.prototype.initialize = function(options) {
-        LegendView.__super__.initialize.call(this, options);
-        this.label_props = new text_properties(this, this.model, 'label_');
-        this.border_props = new line_properties(this, this.model, 'border_');
-        if (this.mget('legend_names')) {
-          this.legend_names = this.mget('legend_names');
-        } else {
-          this.legends = this.mget('legends');
-          this.legend_names = _.keys(this.mget('legends'));
-        }
-        return this.calc_dims();
+      LinearAxisView.prototype.initialize = function(options) {
+        options.formatter = new ticking.BasicTickFormatter();
+        return LinearAxisView.__super__.initialize.call(this, options);
       };
 
-      LegendView.prototype.delegateEvents = function(events) {
-        LegendView.__super__.delegateEvents.call(this, events);
-        return this.listenTo(this.plot_view.view_state, 'change', this.calc_dims);
-      };
+      return LinearAxisView;
 
-      LegendView.prototype.calc_dims = function(options) {
-        var ctx, h_range, label_height, label_width, legend_padding, legend_spacing, orientation, text_width, text_widths, v_range, x, y, _ref1;
-        label_height = this.mget('label_height');
-        this.glyph_height = this.mget('glyph_height');
-        label_width = this.mget('label_width');
-        this.glyph_width = this.mget('glyph_width');
-        legend_spacing = this.mget('legend_spacing');
-        this.label_height = _.max([textutils.getTextHeight(this.label_props.font(this)), label_height, this.glyph_height]);
-        this.legend_height = this.label_height;
-        this.legend_height = this.legend_names.length * this.legend_height + (1 + this.legend_names.length) * legend_spacing;
-        ctx = this.plot_view.ctx;
-        ctx.save();
-        this.label_props.set(ctx, this);
-        text_widths = _.map(this.legend_names, function(txt) {
-          return ctx.measureText(txt).width;
-        });
-        ctx.restore();
-        text_width = _.max(text_widths);
-        this.label_width = _.max([text_width, label_width]);
-        this.legend_width = this.label_width + this.glyph_width + 3 * legend_spacing;
-        orientation = this.mget('orientation');
-        legend_padding = this.mget('legend_padding');
-        h_range = this.plot_view.view_state.get('inner_range_horizontal');
-        v_range = this.plot_view.view_state.get('inner_range_vertical');
-        if (orientation === "top_right") {
-          x = h_range.get('end') - legend_padding - this.legend_width;
-          y = v_range.get('end') - legend_padding;
-        } else if (orientation === "top_left") {
-          x = h_range.get('start') + legend_padding;
-          y = v_range.get('end') - legend_padding;
-        } else if (orientation === "bottom_left") {
-          x = h_range.get('start') + legend_padding;
-          y = v_range.get('start') + legend_padding + this.legend_height;
-        } else if (orientation === "bottom_right") {
-          x = h_range.get('end') - legend_padding - this.legend_width;
-          y = v_range.get('start') + legend_padding + this.legend_height;
-        } else if (orientation === "absolute") {
-          _ref1 = this.absolute_coords, x = _ref1[0], y = _ref1[1];
-        }
-        x = this.plot_view.view_state.vx_to_sx(x);
-        y = this.plot_view.view_state.vy_to_sy(y);
-        return this.box_coords = [x, y];
-      };
+    })(Axis.View);
+    LinearAxis = (function(_super) {
+      __extends(LinearAxis, _super);
 
-      LegendView.prototype.render = function() {
-        var ctx, idx, legend_name, legend_spacing, renderer, view, x, x1, x2, y, y1, y2, yoffset, yspacing, _i, _j, _len, _len1, _ref1, _ref2;
-        ctx = this.plot_view.ctx;
-        ctx.save();
-        ctx.fillStyle = this.plot_model.get('background_fill');
-        this.border_props.set(ctx, this);
-        ctx.beginPath();
-        ctx.rect(this.box_coords[0], this.box_coords[1], this.legend_width, this.legend_height);
-        ctx.fill();
-        ctx.stroke();
-        legend_spacing = this.mget('legend_spacing');
-        _ref1 = this.legend_names;
-        for (idx = _i = 0, _len = _ref1.length; _i < _len; idx = ++_i) {
-          legend_name = _ref1[idx];
-          yoffset = idx * this.label_height;
-          yspacing = (1 + idx) * legend_spacing;
-          y = this.box_coords[1] + this.label_height / 2.0 + yoffset + yspacing;
-          x = this.box_coords[0] + legend_spacing;
-          x1 = this.box_coords[0] + 2 * legend_spacing + this.label_width;
-          x2 = x1 + this.glyph_width;
-          y1 = this.box_coords[1] + yoffset + yspacing;
-          y2 = y1 + this.glyph_height;
-          this.label_props.set(ctx, this);
-          ctx.fillText(legend_name, x, y);
-          _ref2 = this.model.resolve_ref(this.legends[legend_name]);
-          for (_j = 0, _len1 = _ref2.length; _j < _len1; _j++) {
-            renderer = _ref2[_j];
-            view = this.plot_view.renderers[renderer.id];
-            view.draw_legend(ctx, x1, x2, y1, y2);
-          }
-        }
-        return ctx.restore();
-      };
-
-      return LegendView;
-
-    })(PlotWidget);
-    Legend = (function(_super) {
-      __extends(Legend, _super);
-
-      function Legend() {
-        _ref1 = Legend.__super__.constructor.apply(this, arguments);
+      function LinearAxis() {
+        _ref1 = LinearAxis.__super__.constructor.apply(this, arguments);
         return _ref1;
       }
 
-      Legend.prototype.default_view = LegendView;
+      LinearAxis.prototype.default_view = LinearAxisView;
 
-      Legend.prototype.type = 'Legend';
+      LinearAxis.prototype.type = 'LinearAxis';
 
-      Legend.prototype.display_defaults = function() {
-        return {
-          level: 'overlay',
-          border_line_color: 'black',
-          border_line_width: 1,
-          border_line_alpha: 1.0,
-          border_line_join: 'miter',
-          border_line_cap: 'butt',
-          border_line_dash: [],
-          border_line_dash_offset: 0,
-          label_standoff: 15,
-          label_text_font: "helvetica",
-          label_text_font_size: "10pt",
-          label_text_font_style: "normal",
-          label_text_color: "#444444",
-          label_text_alpha: 1.0,
-          label_text_align: "left",
-          label_text_baseline: "middle",
-          glyph_height: 20,
-          glyph_width: 20,
-          label_height: 20,
-          label_width: 50,
-          legend_padding: 10,
-          legend_spacing: 3,
-          orientation: "top_right",
-          datapoint: null
-        };
+      LinearAxis.prototype.initialize = function(attrs, options) {
+        options.scale = new ticking.BasicScale();
+        return LinearAxis.__super__.initialize.call(this, attrs, options);
       };
 
-      return Legend;
+      LinearAxis.prototype.display_defaults = function() {
+        return LinearAxis.__super__.display_defaults.call(this);
+      };
 
-    })(HasParent);
-    Legends = (function(_super) {
-      __extends(Legends, _super);
+      return LinearAxis;
 
-      function Legends() {
-        _ref2 = Legends.__super__.constructor.apply(this, arguments);
+    })(Axis.Model);
+    LinearAxes = (function(_super) {
+      __extends(LinearAxes, _super);
+
+      function LinearAxes() {
+        _ref2 = LinearAxes.__super__.constructor.apply(this, arguments);
         return _ref2;
       }
 
-      Legends.prototype.model = Legend;
+      LinearAxes.prototype.model = LinearAxis;
 
-      return Legends;
+      return LinearAxes;
 
     })(Backbone.Collection);
     return {
-      "Model": Legend,
-      "Collection": new Legends(),
-      "View": LegendView
+      "Model": LinearAxis,
+      "Collection": new LinearAxes(),
+      "View": LinearAxisView
     };
   });
 
 }).call(this);
 
 /*
-//@ sourceMappingURL=legend.js.map
+//@ sourceMappingURL=linear_axis.js.map
 */;
 (function() {
   var __hasProp = {}.hasOwnProperty,
@@ -23591,163 +24477,7 @@ define("sprintf", (function (global) {
   var __hasProp = {}.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
-  define('source/object_array_data_source',["underscore", "backbone", "common/has_properties", "range/range1d", "range/factor_range"], function(_, Backbone, HasProperties, Range1d, FactorRange) {
-    var ObjectArrayDataSource, ObjectArrayDataSources, _ref, _ref1;
-    ObjectArrayDataSource = (function(_super) {
-      __extends(ObjectArrayDataSource, _super);
-
-      function ObjectArrayDataSource() {
-        _ref = ObjectArrayDataSource.__super__.constructor.apply(this, arguments);
-        return _ref;
-      }
-
-      ObjectArrayDataSource.prototype.type = 'ObjectArrayDataSource';
-
-      ObjectArrayDataSource.prototype.initialize = function(attrs, options) {
-        ObjectArrayDataSource.__super__.initialize.call(this, attrs, options);
-        this.cont_ranges = {};
-        return this.discrete_ranges = {};
-      };
-
-      ObjectArrayDataSource.prototype.getcolumn = function(colname) {
-        var x;
-        return (function() {
-          var _i, _len, _ref1, _results;
-          _ref1 = this.get('data');
-          _results = [];
-          for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
-            x = _ref1[_i];
-            _results.push(x[colname]);
-          }
-          return _results;
-        }).call(this);
-      };
-
-      ObjectArrayDataSource.prototype.compute_cont_range = function(field) {
-        var data;
-        data = this.getcolumn(field);
-        return [_.max(data), _.min(data)];
-      };
-
-      ObjectArrayDataSource.prototype.compute_discrete_factor = function(field) {
-        var temp, uniques, val, _i, _len, _ref1;
-        temp = {};
-        _ref1 = this.getcolumn(field);
-        for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
-          val = _ref1[_i];
-          temp[val] = true;
-        }
-        uniques = _.keys(temp);
-        return uniques = _.sortBy(uniques, (function(x) {
-          return x;
-        }));
-      };
-
-      ObjectArrayDataSource.prototype.get_cont_range = function(field, padding) {
-        var center, max, min, span, _ref1, _ref2,
-          _this = this;
-        if (_.isUndefined(padding)) {
-          padding = 1.0;
-        }
-        if (!_.exists(this.cont_ranges, field)) {
-          _ref1 = this.compute_cont_range(field), min = _ref1[0], max = _ref1[1];
-          span = (max - min) * (1 + padding);
-          center = (max + min) / 2.0;
-          _ref2 = [center - span / 2.0, center + span / 2.0], min = _ref2[0], max = _ref2[1];
-          this.cont_ranges[field] = Range1d.Collection.create({
-            start: min,
-            end: max
-          });
-          this.on('change:data', function() {
-            var _ref3;
-            _ref3 = _this.compute_cont_range(field), max = _ref3[0], min = _ref3[1];
-            _this.cont_ranges[field].set('start', min);
-            return _this.cont_ranges[field].set('end', max);
-          });
-        }
-        return this.cont_ranges[field];
-      };
-
-      ObjectArrayDataSource.prototype.get_discrete_range = function(field) {
-        var factors,
-          _this = this;
-        if (!_.exists(this.discrete_ranges, field)) {
-          factors = this.compute_discrete_factor(field);
-          this.discrete_ranges[field] = FactorRange.Collection.create({
-            values: factors
-          });
-          this.on('change:data', function() {
-            factors = _this.compute_discrete_factor(field);
-            return _this.discrete_ranges[field] = FactorRange.Collection.set('values', factors);
-          });
-        }
-        return this.discrete_ranges[field];
-      };
-
-      ObjectArrayDataSource.prototype.select = function(fields, func) {
-        var args, idx, selected, val, x, _i, _len, _ref1;
-        selected = [];
-        _ref1 = this.get('data');
-        for (idx = _i = 0, _len = _ref1.length; _i < _len; idx = ++_i) {
-          val = _ref1[idx];
-          args = (function() {
-            var _j, _len1, _results;
-            _results = [];
-            for (_j = 0, _len1 = fields.length; _j < _len1; _j++) {
-              x = fields[_j];
-              _results.push(val[x]);
-            }
-            return _results;
-          })();
-          if (func.apply(func, args)) {
-            selected.push(idx);
-          }
-        }
-        selected.sort();
-        return selected;
-      };
-
-      ObjectArrayDataSource.prototype.defaults = function() {
-        return {
-          data: [{}],
-          name: 'data',
-          selected: [],
-          selecting: false
-        };
-      };
-
-      return ObjectArrayDataSource;
-
-    })(HasProperties);
-    ObjectArrayDataSources = (function(_super) {
-      __extends(ObjectArrayDataSources, _super);
-
-      function ObjectArrayDataSources() {
-        _ref1 = ObjectArrayDataSources.__super__.constructor.apply(this, arguments);
-        return _ref1;
-      }
-
-      ObjectArrayDataSources.prototype.model = ObjectArrayDataSource;
-
-      return ObjectArrayDataSources;
-
-    })(Backbone.Collection);
-    return {
-      "Model": ObjectArrayDataSource,
-      "Collection": new ObjectArrayDataSources()
-    };
-  });
-
-}).call(this);
-
-/*
-//@ sourceMappingURL=object_array_data_source.js.map
-*/;
-(function() {
-  var __hasProp = {}.hasOwnProperty,
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
-
-  define('source/column_data_source',["underscore", "backbone", "./object_array_data_source"], function(_, Backbone, ObjectArrayDataSource) {
+  define('source/column_data_source',["underscore", "backbone", "common/has_properties"], function(_, Backbone, HasProperties) {
     var ColumnDataSource, ColumnDataSources, _ref, _ref1;
     ColumnDataSource = (function(_super) {
       __extends(ColumnDataSource, _super);
@@ -23766,18 +24496,24 @@ define("sprintf", (function (global) {
       };
 
       ColumnDataSource.prototype.getcolumn = function(colname) {
-        return this.get('data')[colname];
+        var _ref1;
+        return (_ref1 = this.get('data')[colname]) != null ? _ref1 : null;
       };
 
       ColumnDataSource.prototype.getcolumn_with_default = function(colname, default_value) {
         " returns the column, with any undefineds replaced with default";
-        return this.get('data')[colname];
+        var _ref1;
+        return (_ref1 = this.get('data')[colname]) != null ? _ref1 : null;
       };
 
       ColumnDataSource.prototype.get_length = function() {
         var data;
         data = this.get('data');
         return data[_.keys(data)[0]].length;
+      };
+
+      ColumnDataSource.prototype.columns = function() {
+        return _.keys(this.get('data'));
       };
 
       ColumnDataSource.prototype.datapoints = function() {
@@ -23802,7 +24538,7 @@ define("sprintf", (function (global) {
 
       return ColumnDataSource;
 
-    })(ObjectArrayDataSource.Model);
+    })(HasProperties);
     ColumnDataSources = (function(_super) {
       __extends(ColumnDataSources, _super);
 
@@ -23986,7 +24722,18 @@ define("sprintf", (function (global) {
           }
         });
         this.plotview.canvas_wrapper.bind('mousedown', function(e) {
-          if (_this.button_activated || e[_this.options.keyName]) {
+          var start;
+          start = false;
+          if (_this.button_activated || _this.eventSink.active === _this.toolName) {
+            start = true;
+          } else if (!_this.eventSink.active) {
+            if (_this.options.keyName === null && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+              start = true;
+            } else if (e[_this.options.keyName] === true) {
+              start = true;
+            }
+          }
+          if (start) {
             _this._start_drag();
             return false;
           }
@@ -24031,6 +24778,7 @@ define("sprintf", (function (global) {
       };
 
       TwoPointEventGenerator.prototype._start_drag = function() {
+        this._activated_with_button = this.button_activated;
         this.eventSink.trigger("active_tool", this.toolName);
         if (!this.dragging) {
           this.dragging = true;
@@ -24047,6 +24795,9 @@ define("sprintf", (function (global) {
         this.basepoint_set = false;
         if (this.dragging) {
           this.dragging = false;
+          if (this._activated_with_button === false && this.options.auto_deactivate === true) {
+            this.eventSink.trigger("clear_active_tool");
+          }
           if (!this.button_activated) {
             this.$tool_button.removeClass('active');
           }
@@ -24054,8 +24805,9 @@ define("sprintf", (function (global) {
             this.plotview.canvas_wrapper.css('cursor', '');
           }
           set_bokehXY(e);
-          return this.eventSink.trigger("" + this.options.eventBasename + ":DragEnd", e);
+          this.eventSink.trigger("" + this.options.eventBasename + ":DragEnd", e);
         }
+        return this._activated_with_button = null;
       };
 
       return TwoPointEventGenerator;
@@ -24078,14 +24830,13 @@ define("sprintf", (function (global) {
         this.plotview = plotview;
         this.eventSink = eventSink;
         this.plotview.canvas_wrapper.bind("mousewheel", function(e, delta, dX, dY) {
-          if (!_this.tool_active) {
-            return;
+          if (_this.tool_active || (!_this.eventSink.active && e.shiftKey)) {
+            set_bokehXY(e);
+            e.delta = delta;
+            eventSink.trigger("" + toolName + ":zoom", e);
+            e.preventDefault();
+            return e.stopPropagation();
           }
-          set_bokehXY(e);
-          e.delta = delta;
-          eventSink.trigger("" + toolName + ":zoom", e);
-          e.preventDefault();
-          return e.stopPropagation();
         });
         $(document).bind('keydown', function(e) {
           if (e.keyCode === 27) {
@@ -24230,608 +24981,6 @@ define("sprintf", (function (global) {
   var __hasProp = {}.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
-  define('tool/pan_tool',["underscore", "backbone", "./tool", "./event_generators"], function(_, Backbone, Tool, EventGenerators) {
-    var PanTool, PanToolView, PanTools, TwoPointEventGenerator, _ref, _ref1, _ref2;
-    TwoPointEventGenerator = EventGenerators.TwoPointEventGenerator;
-    window.render_count = 0;
-    PanToolView = (function(_super) {
-      __extends(PanToolView, _super);
-
-      function PanToolView() {
-        _ref = PanToolView.__super__.constructor.apply(this, arguments);
-        return _ref;
-      }
-
-      PanToolView.prototype.initialize = function(options) {
-        return PanToolView.__super__.initialize.call(this, options);
-      };
-
-      PanToolView.prototype.bind_bokeh_events = function() {
-        return PanToolView.__super__.bind_bokeh_events.call(this);
-      };
-
-      PanToolView.prototype.eventGeneratorClass = TwoPointEventGenerator;
-
-      PanToolView.prototype.toolType = "PanTool";
-
-      PanToolView.prototype.evgen_options = {
-        keyName: "shiftKey",
-        buttonText: "Pan",
-        cursor: "move",
-        restrict_to_innercanvas: true
-      };
-
-      PanToolView.prototype.tool_events = {
-        UpdatingMouseMove: "_drag",
-        SetBasepoint: "_set_base_point"
-      };
-
-      PanToolView.prototype.mouse_coords = function(e, x, y) {
-        var x_, y_, _ref1;
-        _ref1 = [this.plot_view.view_state.sx_to_vx(x), this.plot_view.view_state.sy_to_vy(y)], x_ = _ref1[0], y_ = _ref1[1];
-        return [x_, y_];
-      };
-
-      PanToolView.prototype._set_base_point = function(e) {
-        var _ref1;
-        _ref1 = this.mouse_coords(e, e.bokehX, e.bokehY), this.x = _ref1[0], this.y = _ref1[1];
-        return null;
-      };
-
-      PanToolView.prototype._drag = function(e) {
-        var pan_info, sx_high, sx_low, sy_high, sy_low, x, xdiff, xend, xr, xstart, y, ydiff, yend, yr, ystart, _ref1, _ref2;
-        _ref1 = this.mouse_coords(e, e.bokehX, e.bokehY), x = _ref1[0], y = _ref1[1];
-        xdiff = x - this.x;
-        ydiff = y - this.y;
-        _ref2 = [x, y], this.x = _ref2[0], this.y = _ref2[1];
-        xr = this.plot_view.view_state.get('inner_range_horizontal');
-        sx_low = xr.get('start') - xdiff;
-        sx_high = xr.get('end') - xdiff;
-        yr = this.plot_view.view_state.get('inner_range_vertical');
-        sy_low = yr.get('start') - ydiff;
-        sy_high = yr.get('end') - ydiff;
-        xstart = this.plot_view.xmapper.map_from_target(sx_low);
-        xend = this.plot_view.xmapper.map_from_target(sx_high);
-        ystart = this.plot_view.ymapper.map_from_target(sy_low);
-        yend = this.plot_view.ymapper.map_from_target(sy_high);
-        pan_info = {
-          xr: {
-            start: xstart,
-            end: xend
-          },
-          yr: {
-            start: ystart,
-            end: yend
-          },
-          sdx: -xdiff,
-          sdy: ydiff
-        };
-        this.plot_view.update_range(pan_info);
-        return null;
-      };
-
-      return PanToolView;
-
-    })(Tool.View);
-    PanTool = (function(_super) {
-      __extends(PanTool, _super);
-
-      function PanTool() {
-        _ref1 = PanTool.__super__.constructor.apply(this, arguments);
-        return _ref1;
-      }
-
-      PanTool.prototype.default_view = PanToolView;
-
-      PanTool.prototype.type = "PanTool";
-
-      PanTool.prototype.defaults = function() {
-        return {
-          dimensions: [],
-          dataranges: []
-        };
-      };
-
-      PanTool.prototype.display_defaults = function() {
-        return PanTool.__super__.display_defaults.call(this);
-      };
-
-      return PanTool;
-
-    })(Tool.Model);
-    PanTools = (function(_super) {
-      __extends(PanTools, _super);
-
-      function PanTools() {
-        _ref2 = PanTools.__super__.constructor.apply(this, arguments);
-        return _ref2;
-      }
-
-      PanTools.prototype.model = PanTool;
-
-      return PanTools;
-
-    })(Backbone.Collection);
-    return {
-      "Model": PanTool,
-      "Collection": new PanTools(),
-      "View": PanToolView
-    };
-  });
-
-}).call(this);
-
-/*
-//@ sourceMappingURL=pan_tool.js.map
-*/;
-(function() {
-  var __hasProp = {}.hasOwnProperty,
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
-
-  define('tool/wheel_zoom_tool',["underscore", "backbone", "./tool", "./event_generators"], function(_, Backbone, Tool, EventGenerators) {
-    var OnePointWheelEventGenerator, WheelZoomTool, WheelZoomToolView, WheelZoomTools, _ref, _ref1, _ref2;
-    OnePointWheelEventGenerator = EventGenerators.OnePointWheelEventGenerator;
-    WheelZoomToolView = (function(_super) {
-      __extends(WheelZoomToolView, _super);
-
-      function WheelZoomToolView() {
-        _ref = WheelZoomToolView.__super__.constructor.apply(this, arguments);
-        return _ref;
-      }
-
-      WheelZoomToolView.prototype.initialize = function(options) {
-        return WheelZoomToolView.__super__.initialize.call(this, options);
-      };
-
-      WheelZoomToolView.prototype.eventGeneratorClass = OnePointWheelEventGenerator;
-
-      WheelZoomToolView.prototype.evgen_options = {
-        buttonText: "WheelZoom"
-      };
-
-      WheelZoomToolView.prototype.tool_events = {
-        zoom: "_zoom"
-      };
-
-      WheelZoomToolView.prototype.mouse_coords = function(e, x, y) {
-        var x_, y_, _ref1;
-        _ref1 = [this.plot_view.view_state.sx_to_vx(x), this.plot_view.view_state.sy_to_vy(y)], x_ = _ref1[0], y_ = _ref1[1];
-        return [x_, y_];
-      };
-
-      WheelZoomToolView.prototype._zoom = function(e) {
-        var delta, factor, screenX, screenY, speed, sx_high, sx_low, sy_high, sy_low, x, xend, xr, xstart, y, yend, yr, ystart, zoom_info, _ref1, _ref2, _ref3;
-        delta = e.originalEvent.wheelDelta;
-        screenX = e.bokehX;
-        screenY = e.bokehY;
-        _ref1 = this.mouse_coords(e, screenX, screenY), x = _ref1[0], y = _ref1[1];
-        speed = this.mget('speed');
-        factor = speed * delta;
-        if (factor > 0.9) {
-          factor = 0.9;
-        } else if (factor < -0.9) {
-          factor = -0.9;
-        }
-        xr = this.plot_view.view_state.get('inner_range_horizontal');
-        sx_low = xr.get('start');
-        sx_high = xr.get('end');
-        yr = this.plot_view.view_state.get('inner_range_vertical');
-        sy_low = yr.get('start');
-        sy_high = yr.get('end');
-        _ref2 = this.plot_view.xmapper.v_map_from_target([sx_low - (sx_low - x) * factor, sx_high - (sx_high - x) * factor]), xstart = _ref2[0], xend = _ref2[1];
-        _ref3 = this.plot_view.ymapper.v_map_from_target([sy_low - (sy_low - y) * factor, sy_high - (sy_high - y) * factor]), ystart = _ref3[0], yend = _ref3[1];
-        zoom_info = {
-          xr: {
-            start: xstart,
-            end: xend
-          },
-          yr: {
-            start: ystart,
-            end: yend
-          },
-          factor: factor
-        };
-        this.plot_view.update_range(zoom_info);
-        return null;
-      };
-
-      return WheelZoomToolView;
-
-    })(Tool.View);
-    WheelZoomTool = (function(_super) {
-      __extends(WheelZoomTool, _super);
-
-      function WheelZoomTool() {
-        _ref1 = WheelZoomTool.__super__.constructor.apply(this, arguments);
-        return _ref1;
-      }
-
-      WheelZoomTool.prototype.default_view = WheelZoomToolView;
-
-      WheelZoomTool.prototype.type = "WheelZoomTool";
-
-      WheelZoomTool.prototype.defaults = function() {
-        return {
-          dimensions: [],
-          dataranges: [],
-          speed: 1 / 600
-        };
-      };
-
-      return WheelZoomTool;
-
-    })(Tool.Model);
-    WheelZoomTools = (function(_super) {
-      __extends(WheelZoomTools, _super);
-
-      function WheelZoomTools() {
-        _ref2 = WheelZoomTools.__super__.constructor.apply(this, arguments);
-        return _ref2;
-      }
-
-      WheelZoomTools.prototype.model = WheelZoomTool;
-
-      WheelZoomTools.prototype.display_defaults = function() {
-        return WheelZoomTools.__super__.display_defaults.call(this);
-      };
-
-      return WheelZoomTools;
-
-    })(Backbone.Collection);
-    return {
-      "Model": WheelZoomTool,
-      "Collection": new WheelZoomTools(),
-      "View": WheelZoomToolView
-    };
-  });
-
-}).call(this);
-
-/*
-//@ sourceMappingURL=wheel_zoom_tool.js.map
-*/;
-(function() {
-  var __hasProp = {}.hasOwnProperty,
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
-
-  define('tool/resize_tool',["underscore", "backbone", "./tool", "./event_generators"], function(_, Backbone, Tool, EventGenerators) {
-    var ResizeTool, ResizeToolView, ResizeTools, TwoPointEventGenerator, _ref, _ref1, _ref2;
-    TwoPointEventGenerator = EventGenerators.TwoPointEventGenerator;
-    ResizeToolView = (function(_super) {
-      __extends(ResizeToolView, _super);
-
-      function ResizeToolView() {
-        _ref = ResizeToolView.__super__.constructor.apply(this, arguments);
-        return _ref;
-      }
-
-      ResizeToolView.prototype.initialize = function(options) {
-        ResizeToolView.__super__.initialize.call(this, options);
-        return this.active = false;
-      };
-
-      ResizeToolView.prototype.bind_events = function(plotview) {
-        return ResizeToolView.__super__.bind_events.call(this, plotview);
-      };
-
-      ResizeToolView.prototype.eventGeneratorClass = TwoPointEventGenerator;
-
-      ResizeToolView.prototype.toolType = "ResizeTool";
-
-      ResizeToolView.prototype.evgen_options = {
-        keyName: "",
-        buttonText: "Resize",
-        cursor: "move"
-      };
-
-      ResizeToolView.prototype.tool_events = {
-        activated: "_activate",
-        deactivated: "_deactivate",
-        UpdatingMouseMove: "_drag",
-        SetBasepoint: "_set_base_point"
-      };
-
-      ResizeToolView.prototype.render = function() {
-        var ch, ctx, cw, line_width;
-        if (!this.active) {
-          return;
-        }
-        ctx = this.plot_view.ctx;
-        cw = this.plot_view.view_state.get('canvas_width');
-        ch = this.plot_view.view_state.get('canvas_height');
-        line_width = 8;
-        ctx.save();
-        ctx.strokeStyle = 'grey';
-        ctx.globalAlpha = 0.7;
-        ctx.lineWidth = line_width;
-        ctx.setLineDash([]);
-        ctx.beginPath();
-        ctx.rect(line_width, line_width, cw - line_width * 2, ch - line_width * 2);
-        ctx.moveTo(line_width, line_width);
-        ctx.lineTo(cw - line_width, ch - line_width);
-        ctx.moveTo(line_width, ch - line_width);
-        ctx.lineTo(cw - line_width, line_width);
-        ctx.stroke();
-        return ctx.restore();
-      };
-
-      ResizeToolView.prototype.mouse_coords = function(e, x, y) {
-        return [x, y];
-      };
-
-      ResizeToolView.prototype._activate = function(e) {
-        var bbar, ch, cw;
-        if (this.active) {
-          return;
-        }
-        this.active = true;
-        this.popup = $('<div class="resize_popup pull-right"\nstyle="border-radius: 10px; background-color: lightgrey; padding:3px 8px; font-size: 14px;\nposition:absolute; right:20px; top: 20px; "></div>');
-        bbar = this.plot_view.$el.find('.bokeh_canvas_wrapper');
-        this.popup.appendTo(bbar);
-        ch = this.plot_view.view_state.get('outer_height');
-        cw = this.plot_view.view_state.get('outer_width');
-        this.popup.text("width: " + cw + " height: " + ch);
-        this.request_render();
-        this.plot_view.request_render();
-        return null;
-      };
-
-      ResizeToolView.prototype._deactivate = function(e) {
-        this.active = false;
-        this.popup.remove();
-        this.request_render();
-        this.plot_view.request_render();
-        return null;
-      };
-
-      ResizeToolView.prototype._set_base_point = function(e) {
-        var _ref1;
-        _ref1 = this.mouse_coords(e, e.bokehX, e.bokehY), this.x = _ref1[0], this.y = _ref1[1];
-        return null;
-      };
-
-      ResizeToolView.prototype._drag = function(e) {
-        var ch, cw, x, xdiff, y, ydiff, _ref1, _ref2;
-        this.plot_view.pause();
-        _ref1 = this.mouse_coords(e, e.bokehX, e.bokehY), x = _ref1[0], y = _ref1[1];
-        xdiff = x - this.x;
-        ydiff = y - this.y;
-        _ref2 = [x, y], this.x = _ref2[0], this.y = _ref2[1];
-        ch = this.plot_view.view_state.get('outer_height');
-        cw = this.plot_view.view_state.get('outer_width');
-        this.popup.text("width: " + cw + " height: " + ch);
-        this.plot_view.view_state.set('outer_height', ch + ydiff, {
-          'silent': true
-        });
-        this.plot_view.view_state.set('outer_width', cw + xdiff, {
-          'silent': true
-        });
-        this.plot_view.view_state.set('canvas_height', ch + ydiff, {
-          'silent': true
-        });
-        this.plot_view.view_state.set('canvas_width', cw + xdiff, {
-          'silent': true
-        });
-        this.plot_view.view_state.trigger('change:outer_height', ch + ydiff);
-        this.plot_view.view_state.trigger('change:outer_width', cw + xdiff);
-        this.plot_view.view_state.trigger('change:canvas_height', ch + ydiff);
-        this.plot_view.view_state.trigger('change:canvas_width', cw + xdiff);
-        this.plot_view.view_state.trigger('change', this.plot_view.view_state);
-        this.plot_view.unpause(true);
-        return null;
-      };
-
-      return ResizeToolView;
-
-    })(Tool.View);
-    ResizeTool = (function(_super) {
-      __extends(ResizeTool, _super);
-
-      function ResizeTool() {
-        _ref1 = ResizeTool.__super__.constructor.apply(this, arguments);
-        return _ref1;
-      }
-
-      ResizeTool.prototype.default_view = ResizeToolView;
-
-      ResizeTool.prototype.type = "ResizeTool";
-
-      ResizeTool.prototype.display_defaults = function() {
-        return ResizeTool.__super__.display_defaults.call(this);
-      };
-
-      return ResizeTool;
-
-    })(Tool.Model);
-    ResizeTools = (function(_super) {
-      __extends(ResizeTools, _super);
-
-      function ResizeTools() {
-        _ref2 = ResizeTools.__super__.constructor.apply(this, arguments);
-        return _ref2;
-      }
-
-      ResizeTools.prototype.model = ResizeTool;
-
-      return ResizeTools;
-
-    })(Backbone.Collection);
-    return {
-      "Model": ResizeTool,
-      "Collection": new ResizeTools(),
-      "View": ResizeToolView
-    };
-  });
-
-}).call(this);
-
-/*
-//@ sourceMappingURL=resize_tool.js.map
-*/;
-(function() {
-  var __hasProp = {}.hasOwnProperty,
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
-
-  define('tool/crosshair_tool',["underscore", "backbone", "./tool", "./event_generators", "sprintf"], function(_, Backbone, Tool, EventGenerators, sprintf) {
-    var CrosshairTool, CrosshairToolView, CrosshairTools, TwoPointEventGenerator, _ref, _ref1, _ref2;
-    TwoPointEventGenerator = EventGenerators.TwoPointEventGenerator;
-    CrosshairToolView = (function(_super) {
-      __extends(CrosshairToolView, _super);
-
-      function CrosshairToolView() {
-        _ref = CrosshairToolView.__super__.constructor.apply(this, arguments);
-        return _ref;
-      }
-
-      CrosshairToolView.prototype.initialize = function(options) {
-        CrosshairToolView.__super__.initialize.call(this, options);
-        return this.active = false;
-      };
-
-      CrosshairToolView.prototype.bind_events = function(plotview) {
-        return CrosshairToolView.__super__.bind_events.call(this, plotview);
-      };
-
-      CrosshairToolView.prototype.eventGeneratorClass = TwoPointEventGenerator;
-
-      CrosshairToolView.prototype.toolType = "CrosshairTool";
-
-      CrosshairToolView.prototype.evgen_options = {
-        keyName: "",
-        buttonText: "Crosshair",
-        cursor: "crosshair"
-      };
-
-      CrosshairToolView.prototype.tool_events = {
-        activated: "_activate",
-        deactivated: "_deactivate",
-        UpdatingMouseMove: "_drag",
-        SetBasepoint: "_set_base_point"
-      };
-
-      CrosshairToolView.prototype.render = function() {
-        var ch, ctx, cw, line_width;
-        if (!this.active) {
-          return;
-        }
-        ctx = this.plot_view.ctx;
-        cw = this.plot_view.view_state.get('canvas_width');
-        ch = this.plot_view.view_state.get('canvas_height');
-        line_width = 1;
-        ctx.save();
-        ctx.strokeStyle = 'red';
-        ctx.globalAlpha = 0.7;
-        ctx.lineWidth = line_width;
-        ctx.setLineDash([]);
-        ctx.beginPath();
-        ctx.moveTo(0, this.y);
-        ctx.lineTo(cw, this.y);
-        console.log(this.x, this.y);
-        ctx.moveTo(this.x, 0);
-        ctx.lineTo(this.x, ch);
-        ctx.stroke();
-        return ctx.restore();
-      };
-
-      CrosshairToolView.prototype.mouse_coords = function(e, x, y) {
-        return [x, y];
-      };
-
-      CrosshairToolView.prototype._activate = function(e) {
-        var bbar, ch, cw;
-        if (this.active) {
-          return;
-        }
-        this.active = true;
-        this.popup = $('<div class="resize_popup pull-right"\nstyle="border-radius: 10px; background-color: lightgrey; padding:3px 8px; font-size: 14px;\nposition:absolute; right:20px; top: 20px; "></div>');
-        bbar = this.plot_view.$el.find('.bokeh_canvas_wrapper');
-        this.popup.appendTo(bbar);
-        ch = this.plot_view.view_state.get('outer_height');
-        cw = this.plot_view.view_state.get('outer_width');
-        this.popup.text("x: 0 y:0");
-        this.plot_view.$el.css("cursor", "crosshair");
-        return null;
-      };
-
-      CrosshairToolView.prototype._deactivate = function(e) {
-        this.active = false;
-        this.plot_view.$el.css("cursor", "default");
-        this.popup.remove();
-        this.request_render();
-        this.plot_view.request_render();
-        return null;
-      };
-
-      CrosshairToolView.prototype._set_base_point = function(e) {
-        var _ref1;
-        _ref1 = this.mouse_coords(e, e.bokehX, e.bokehY), this.x = _ref1[0], this.y = _ref1[1];
-        return null;
-      };
-
-      CrosshairToolView.prototype._drag = function(e) {
-        var data_x, data_y, _ref1;
-        this.plot_view.pause();
-        _ref1 = this.mouse_coords(e, e.bokehX, e.bokehY), this.x = _ref1[0], this.y = _ref1[1];
-        data_x = sprintf("%.4f", this.plot_view.xmapper.map_from_target(x));
-        data_y = sprintf("%.4f", this.plot_view.ymapper.map_from_target(y));
-        this.popup.text("x: " + data_x + " y: " + data_y);
-        this.request_render();
-        this.plot_view.request_render();
-        this.plot_view.unpause(true);
-        return null;
-      };
-
-      return CrosshairToolView;
-
-    })(Tool.View);
-    CrosshairTool = (function(_super) {
-      __extends(CrosshairTool, _super);
-
-      function CrosshairTool() {
-        _ref1 = CrosshairTool.__super__.constructor.apply(this, arguments);
-        return _ref1;
-      }
-
-      CrosshairTool.prototype.default_view = CrosshairToolView;
-
-      CrosshairTool.prototype.type = "CrosshairTool";
-
-      CrosshairTool.prototype.display_defaults = function() {
-        return CrosshairTool.__super__.display_defaults.call(this);
-      };
-
-      return CrosshairTool;
-
-    })(Tool.Model);
-    CrosshairTools = (function(_super) {
-      __extends(CrosshairTools, _super);
-
-      function CrosshairTools() {
-        _ref2 = CrosshairTools.__super__.constructor.apply(this, arguments);
-        return _ref2;
-      }
-
-      CrosshairTools.prototype.model = CrosshairTool;
-
-      return CrosshairTools;
-
-    })(Backbone.Collection);
-    return {
-      "Model": CrosshairTool,
-      "Collection": new CrosshairTools(),
-      "View": CrosshairToolView
-    };
-  });
-
-}).call(this);
-
-/*
-//@ sourceMappingURL=crosshair_tool.js.map
-*/;
-(function() {
-  var __hasProp = {}.hasOwnProperty,
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
-
   define('tool/box_select_tool',["underscore", "backbone", "./tool", "./event_generators"], function(_, Backbone, Tool, EventGenerators) {
     var BoxSelectTool, BoxSelectToolView, BoxSelectTools, TwoPointEventGenerator, _ref, _ref1, _ref2;
     TwoPointEventGenerator = EventGenerators.TwoPointEventGenerator;
@@ -24868,7 +25017,7 @@ define("sprintf", (function (global) {
       BoxSelectToolView.prototype.toolType = "BoxSelectTool";
 
       BoxSelectToolView.prototype.evgen_options = {
-        keyName: "ctrlKey",
+        keyName: "shiftKey",
         buttonText: "Select",
         cursor: "crosshair",
         restrict_to_innercanvas: true
@@ -25052,6 +25201,345 @@ define("sprintf", (function (global) {
   var __hasProp = {}.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
+  define('tool/box_zoom_tool',["underscore", "backbone", "./tool", "./event_generators"], function(_, Backbone, Tool, EventGenerators) {
+    var BoxZoomTool, BoxZoomToolView, BoxZoomTools, TwoPointEventGenerator, _ref, _ref1, _ref2;
+    TwoPointEventGenerator = EventGenerators.TwoPointEventGenerator;
+    BoxZoomToolView = (function(_super) {
+      __extends(BoxZoomToolView, _super);
+
+      function BoxZoomToolView() {
+        _ref = BoxZoomToolView.__super__.constructor.apply(this, arguments);
+        return _ref;
+      }
+
+      BoxZoomToolView.prototype.initialize = function(options) {
+        return BoxZoomToolView.__super__.initialize.call(this, options);
+      };
+
+      BoxZoomToolView.prototype.bind_bokeh_events = function() {
+        return BoxZoomToolView.__super__.bind_bokeh_events.call(this);
+      };
+
+      BoxZoomToolView.prototype.eventGeneratorClass = TwoPointEventGenerator;
+
+      BoxZoomToolView.prototype.toolType = "BoxZoomTool";
+
+      BoxZoomToolView.prototype.evgen_options = {
+        keyName: "ctrlKey",
+        buttonText: "Box Zoom",
+        cursor: "crosshair",
+        auto_deactivate: true,
+        restrict_to_innercanvas: true
+      };
+
+      BoxZoomToolView.prototype.tool_events = {
+        SetBasepoint: "_start_selecting",
+        UpdatingMouseMove: "_selecting",
+        DragEnd: "_dragend"
+      };
+
+      BoxZoomToolView.prototype.pause = function() {
+        return null;
+      };
+
+      BoxZoomToolView.prototype.view_coords = function(sx, sy) {
+        var vx, vy, _ref1;
+        _ref1 = [this.plot_view.view_state.sx_to_vx(sx), this.plot_view.view_state.sy_to_vy(sy)], vx = _ref1[0], vy = _ref1[1];
+        return [vx, vy];
+      };
+
+      BoxZoomToolView.prototype._start_selecting = function(e) {
+        var vx, vy, _ref1;
+        this.plot_view.pause();
+        this.trigger('startselect');
+        _ref1 = this.view_coords(e.bokehX, e.bokehY), vx = _ref1[0], vy = _ref1[1];
+        this.mset({
+          'start_vx': vx,
+          'start_vy': vy,
+          'current_vx': null,
+          'current_vy': null
+        });
+        return this.basepoint_set = true;
+      };
+
+      BoxZoomToolView.prototype._get_selection_range = function() {
+        var xrange, yrange;
+        if (this.mget('select_x')) {
+          xrange = [this.mget('start_vx'), this.mget('current_vx')];
+          xrange = [_.min(xrange), _.max(xrange)];
+        } else {
+          xrange = null;
+        }
+        if (this.mget('select_y')) {
+          yrange = [this.mget('start_vy'), this.mget('current_vy')];
+          yrange = [_.min(yrange), _.max(yrange)];
+        } else {
+          yrange = null;
+        }
+        return [xrange, yrange];
+      };
+
+      BoxZoomToolView.prototype._selecting = function(e, x_, y_) {
+        var vx, vy, _ref1, _ref2;
+        _ref1 = this.view_coords(e.bokehX, e.bokehY), vx = _ref1[0], vy = _ref1[1];
+        this.mset({
+          'current_vx': vx,
+          'current_vy': vy
+        });
+        _ref2 = this._get_selection_range(), this.xrange = _ref2[0], this.yrange = _ref2[1];
+        this.trigger('boxselect', this.xrange, this.yrange);
+        this.plot_view.render_overlays(true);
+        return null;
+      };
+
+      BoxZoomToolView.prototype._dragend = function() {
+        this._select_data();
+        this.basepoint_set = false;
+        this.plot_view.unpause();
+        return this.trigger('stopselect');
+      };
+
+      BoxZoomToolView.prototype._select_data = function() {
+        var xend, xstart, yend, ystart, zoom_info, _ref1, _ref2;
+        if (!this.basepoint_set) {
+          return;
+        }
+        _ref1 = this.plot_view.xmapper.v_map_from_target([this.xrange[0], this.xrange[1]]), xstart = _ref1[0], xend = _ref1[1];
+        _ref2 = this.plot_view.ymapper.v_map_from_target([this.yrange[0], this.yrange[1]]), ystart = _ref2[0], yend = _ref2[1];
+        zoom_info = {
+          xr: {
+            start: xstart,
+            end: xend
+          },
+          yr: {
+            start: ystart,
+            end: yend
+          }
+        };
+        return this.plot_view.update_range(zoom_info);
+      };
+
+      return BoxZoomToolView;
+
+    })(Tool.View);
+    BoxZoomTool = (function(_super) {
+      __extends(BoxZoomTool, _super);
+
+      function BoxZoomTool() {
+        _ref1 = BoxZoomTool.__super__.constructor.apply(this, arguments);
+        return _ref1;
+      }
+
+      BoxZoomTool.prototype.default_view = BoxZoomToolView;
+
+      BoxZoomTool.prototype.type = "BoxZoomTool";
+
+      BoxZoomTool.prototype.defaults = function() {
+        return _.extend(BoxZoomTool.__super__.defaults.call(this), {
+          renderers: [],
+          select_x: true,
+          select_y: true,
+          select_every_mousemove: false,
+          data_source_options: {}
+        });
+      };
+
+      BoxZoomTool.prototype.display_defaults = function() {
+        return BoxZoomTool.__super__.display_defaults.call(this);
+      };
+
+      return BoxZoomTool;
+
+    })(Tool.Model);
+    BoxZoomTools = (function(_super) {
+      __extends(BoxZoomTools, _super);
+
+      function BoxZoomTools() {
+        _ref2 = BoxZoomTools.__super__.constructor.apply(this, arguments);
+        return _ref2;
+      }
+
+      BoxZoomTools.prototype.model = BoxZoomTool;
+
+      return BoxZoomTools;
+
+    })(Backbone.Collection);
+    return {
+      "Model": BoxZoomTool,
+      "Collection": new BoxZoomTools(),
+      "View": BoxZoomToolView
+    };
+  });
+
+}).call(this);
+
+/*
+//@ sourceMappingURL=box_zoom_tool.js.map
+*/;
+(function() {
+  var __hasProp = {}.hasOwnProperty,
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+  define('tool/crosshair_tool',["underscore", "backbone", "./tool", "./event_generators", "sprintf"], function(_, Backbone, Tool, EventGenerators, sprintf) {
+    var CrosshairTool, CrosshairToolView, CrosshairTools, TwoPointEventGenerator, _ref, _ref1, _ref2;
+    TwoPointEventGenerator = EventGenerators.TwoPointEventGenerator;
+    CrosshairToolView = (function(_super) {
+      __extends(CrosshairToolView, _super);
+
+      function CrosshairToolView() {
+        _ref = CrosshairToolView.__super__.constructor.apply(this, arguments);
+        return _ref;
+      }
+
+      CrosshairToolView.prototype.initialize = function(options) {
+        CrosshairToolView.__super__.initialize.call(this, options);
+        return this.active = false;
+      };
+
+      CrosshairToolView.prototype.bind_events = function(plotview) {
+        return CrosshairToolView.__super__.bind_events.call(this, plotview);
+      };
+
+      CrosshairToolView.prototype.eventGeneratorClass = TwoPointEventGenerator;
+
+      CrosshairToolView.prototype.toolType = "CrosshairTool";
+
+      CrosshairToolView.prototype.evgen_options = {
+        keyName: "",
+        buttonText: "Crosshair",
+        cursor: "crosshair"
+      };
+
+      CrosshairToolView.prototype.tool_events = {
+        activated: "_activate",
+        deactivated: "_deactivate",
+        UpdatingMouseMove: "_drag",
+        SetBasepoint: "_set_base_point"
+      };
+
+      CrosshairToolView.prototype.render = function() {
+        var ch, ctx, cw, line_width;
+        if (!this.active) {
+          return;
+        }
+        ctx = this.plot_view.ctx;
+        cw = this.plot_view.view_state.get('canvas_width');
+        ch = this.plot_view.view_state.get('canvas_height');
+        line_width = 1;
+        ctx.save();
+        ctx.strokeStyle = 'red';
+        ctx.globalAlpha = 0.7;
+        ctx.lineWidth = line_width;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(0, this.y);
+        ctx.lineTo(cw, this.y);
+        console.log(this.x, this.y);
+        ctx.moveTo(this.x, 0);
+        ctx.lineTo(this.x, ch);
+        ctx.stroke();
+        return ctx.restore();
+      };
+
+      CrosshairToolView.prototype.mouse_coords = function(e, x, y) {
+        return [x, y];
+      };
+
+      CrosshairToolView.prototype._activate = function(e) {
+        var bbar, ch, cw;
+        if (this.active) {
+          return;
+        }
+        this.active = true;
+        this.popup = $('<div class="resize_popup pull-right"\nstyle="border-radius: 10px; background-color: lightgrey; padding:3px 8px; font-size: 14px;\nposition:absolute; right:20px; top: 20px; "></div>');
+        bbar = this.plot_view.$el.find('.bokeh_canvas_wrapper');
+        this.popup.appendTo(bbar);
+        ch = this.plot_view.view_state.get('outer_height');
+        cw = this.plot_view.view_state.get('outer_width');
+        this.popup.text("x: 0 y:0");
+        this.plot_view.$el.css("cursor", "crosshair");
+        return null;
+      };
+
+      CrosshairToolView.prototype._deactivate = function(e) {
+        this.active = false;
+        this.plot_view.$el.css("cursor", "default");
+        this.popup.remove();
+        this.request_render();
+        this.plot_view.request_render();
+        return null;
+      };
+
+      CrosshairToolView.prototype._set_base_point = function(e) {
+        var _ref1;
+        _ref1 = this.mouse_coords(e, e.bokehX, e.bokehY), this.x = _ref1[0], this.y = _ref1[1];
+        return null;
+      };
+
+      CrosshairToolView.prototype._drag = function(e) {
+        var data_x, data_y, _ref1;
+        this.plot_view.pause();
+        _ref1 = this.mouse_coords(e, e.bokehX, e.bokehY), this.x = _ref1[0], this.y = _ref1[1];
+        data_x = sprintf("%.4f", this.plot_view.xmapper.map_from_target(x));
+        data_y = sprintf("%.4f", this.plot_view.ymapper.map_from_target(y));
+        this.popup.text("x: " + data_x + " y: " + data_y);
+        this.request_render();
+        this.plot_view.request_render();
+        this.plot_view.unpause(true);
+        return null;
+      };
+
+      return CrosshairToolView;
+
+    })(Tool.View);
+    CrosshairTool = (function(_super) {
+      __extends(CrosshairTool, _super);
+
+      function CrosshairTool() {
+        _ref1 = CrosshairTool.__super__.constructor.apply(this, arguments);
+        return _ref1;
+      }
+
+      CrosshairTool.prototype.default_view = CrosshairToolView;
+
+      CrosshairTool.prototype.type = "CrosshairTool";
+
+      CrosshairTool.prototype.display_defaults = function() {
+        return CrosshairTool.__super__.display_defaults.call(this);
+      };
+
+      return CrosshairTool;
+
+    })(Tool.Model);
+    CrosshairTools = (function(_super) {
+      __extends(CrosshairTools, _super);
+
+      function CrosshairTools() {
+        _ref2 = CrosshairTools.__super__.constructor.apply(this, arguments);
+        return _ref2;
+      }
+
+      CrosshairTools.prototype.model = CrosshairTool;
+
+      return CrosshairTools;
+
+    })(Backbone.Collection);
+    return {
+      "Model": CrosshairTool,
+      "Collection": new CrosshairTools(),
+      "View": CrosshairToolView
+    };
+  });
+
+}).call(this);
+
+/*
+//@ sourceMappingURL=crosshair_tool.js.map
+*/;
+(function() {
+  var __hasProp = {}.hasOwnProperty,
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
   define('tool/data_range_box_select_tool',["underscore", "backbone", "./box_select_tool"], function(_, Backbone, BoxSelectTool) {
     var DataRangeBoxSelectTool, DataRangeBoxSelectToolView, DataRangeBoxSelectTools, _ref, _ref1, _ref2;
     DataRangeBoxSelectToolView = (function(_super) {
@@ -25122,67 +25610,534 @@ define("sprintf", (function (global) {
 /*
 //@ sourceMappingURL=data_range_box_select_tool.js.map
 */;
-/* ===================================================
- * bootstrap-transition.js v2.0.4
- * http://twitter.github.com/bootstrap/javascript.html#transitions
- * ===================================================
- * Copyright 2012 Twitter, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- * ========================================================== */
+(function() {
+  var __hasProp = {}.hasOwnProperty,
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
+  define('tool/embed_tool',["underscore", "backbone", "./tool", "./event_generators"], function(_, Backbone, Tool, EventGenerators) {
+    var ButtonEventGenerator, EmbedTool, EmbedToolView, EmbedTools, escapeHTML, _ref, _ref1, _ref2;
+    ButtonEventGenerator = EventGenerators.ButtonEventGenerator;
+    escapeHTML = function(unsafe_str) {
+      return unsafe_str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;').replace(/\'/g, '&#39;');
+    };
+    EmbedToolView = (function(_super) {
+      __extends(EmbedToolView, _super);
 
-!function ($) {
-
-  $(function () {
-
-     // jshint ;_;
-
-
-    /* CSS TRANSITION SUPPORT (http://www.modernizr.com/)
-     * ======================================================= */
-
-    $.support.transition = (function () {
-
-      var transitionEnd = (function () {
-
-        var el = document.createElement('bootstrap')
-          , transEndEventNames = {
-               'WebkitTransition' : 'webkitTransitionEnd'
-            ,  'MozTransition'    : 'transitionend'
-            ,  'OTransition'      : 'oTransitionEnd'
-            ,  'msTransition'     : 'MSTransitionEnd'
-            ,  'transition'       : 'transitionend'
-            }
-          , name
-
-        for (name in transEndEventNames){
-          if (el.style[name] !== undefined) {
-            return transEndEventNames[name]
-          }
-        }
-
-      }())
-
-      return transitionEnd && {
-        end: transitionEnd
+      function EmbedToolView() {
+        _ref = EmbedToolView.__super__.constructor.apply(this, arguments);
+        return _ref;
       }
 
-    })()
+      EmbedToolView.prototype.initialize = function(options) {
+        return EmbedToolView.__super__.initialize.call(this, options);
+      };
 
-  })
+      EmbedToolView.prototype.eventGeneratorClass = ButtonEventGenerator;
 
-}(window.jQuery);
+      EmbedToolView.prototype.evgen_options = {
+        buttonText: "Embed Html"
+      };
+
+      EmbedToolView.prototype.toolType = "EmbedTool";
+
+      EmbedToolView.prototype.tool_events = {
+        activated: "_activated",
+        deactivated: "_close_modal"
+      };
+
+      EmbedToolView.prototype._activated = function(e) {
+        var baseurl, doc_apikey, doc_id, modal, model_id, script_inject_escaped,
+          _this = this;
+        console.log("EmbedToolView._activated");
+        window.tool_view = this;
+        model_id = this.plot_model.get('id');
+        doc_id = this.plot_model.get('doc');
+        doc_apikey = this.plot_model.get('docapikey');
+        baseurl = this.plot_model.get('baseurl');
+        script_inject_escaped = escapeHTML(this.plot_model.get('script_inject_snippet'));
+        modal = "<div id=\"embedModal\" class=\"bokeh\">\n  <div  class=\"modal\" role=\"dialog\" aria-labelledby=\"embedLabel\" aria-hidden=\"true\">\n    <div class=\"modal-header\">\n      <button type=\"button\" class=\"close\" data-dismiss=\"modal\" aria-hidden=\"true\">×</button>\n      <h3 id=\"dataConfirmLabel\"> HTML Embed code</h3></div><div class=\"modal-body\">\n      <div class=\"modal-body\">\n        " + script_inject_escaped + "\n      </div>\n    </div>\n    <div class=\"modal-footer\">\n      <button class=\"btn\" data-dismiss=\"modal\" aria-hidden=\"true\">Close</button>\n    </div>\n  </div>\n</div>";
+        $('body').append(modal);
+        $('#embedModal > .modal').on('hidden', function() {
+          return _this.plot_view.eventSink.trigger("clear_active_tool");
+        });
+        return $('#embedModal > .modal').modal({
+          show: true
+        });
+      };
+
+      EmbedToolView.prototype._close_modal = function() {
+        $('#embedModal').remove();
+        return $('#embedModal > .modal').remove();
+      };
+
+      return EmbedToolView;
+
+    })(Tool.View);
+    EmbedTool = (function(_super) {
+      __extends(EmbedTool, _super);
+
+      function EmbedTool() {
+        _ref1 = EmbedTool.__super__.constructor.apply(this, arguments);
+        return _ref1;
+      }
+
+      EmbedTool.prototype.default_view = EmbedToolView;
+
+      EmbedTool.prototype.type = "EmbedTool";
+
+      return EmbedTool;
+
+    })(Tool.Model);
+    EmbedTools = (function(_super) {
+      __extends(EmbedTools, _super);
+
+      function EmbedTools() {
+        _ref2 = EmbedTools.__super__.constructor.apply(this, arguments);
+        return _ref2;
+      }
+
+      EmbedTools.prototype.model = EmbedTool;
+
+      EmbedTools.prototype.display_defaults = function() {
+        return EmbedTools.__super__.display_defaults.call(this);
+      };
+
+      return EmbedTools;
+
+    })(Backbone.Collection);
+    return {
+      "Model": EmbedTool,
+      "Collection": new EmbedTools(),
+      "View": EmbedToolView
+    };
+  });
+
+}).call(this);
+
+/*
+//@ sourceMappingURL=embed_tool.js.map
+*/;
+(function() {
+  var __hasProp = {}.hasOwnProperty,
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+  define('tool/hover_tool',["underscore", "backbone", "sprintf", "./tool"], function(_, Backbone, sprintf, Tool) {
+    var HoverTool, HoverToolView, HoverTools, _color_to_hex, _format_number, _ref, _ref1, _ref2;
+    _color_to_hex = function(color) {
+      var blue, digits, green, red, rgb;
+      if (color.substr(0, 1) === '#') {
+        return color;
+      }
+      digits = /(.*?)rgb\((\d+), (\d+), (\d+)\)/.exec(color);
+      red = parseInt(digits[2]);
+      green = parseInt(digits[3]);
+      blue = parseInt(digits[4]);
+      rgb = blue | (green << 8) | (red << 16);
+      return digits[1] + '#' + rgb.toString(16);
+    };
+    _format_number = function(number) {
+      if (typeof number === "string") {
+        return number;
+      }
+      if (Math.floor(number) === number) {
+        return sprintf("%d", number);
+      }
+      if (Math.abs(number) > 0.1 && Math.abs(number) < 1000) {
+        return sprintf("%0.3f", number);
+      }
+      return sprintf("%0.3e", number);
+    };
+    HoverToolView = (function(_super) {
+      __extends(HoverToolView, _super);
+
+      function HoverToolView() {
+        _ref = HoverToolView.__super__.constructor.apply(this, arguments);
+        return _ref;
+      }
+
+      HoverToolView.prototype.initialize = function(options) {
+        HoverToolView.__super__.initialize.call(this, options);
+        this.div = $('<div class="bokeh_tooltip" />').appendTo('body');
+        this.div.hide();
+        return this.active = false;
+      };
+
+      HoverToolView.prototype.bind_bokeh_events = function() {
+        var tool_name,
+          _this = this;
+        tool_name = "hover_tool";
+        this.tool_button = $("<button class='btn btn-small'> Hover </button>");
+        this.plot_view.$el.find('.button_bar').append(this.tool_button);
+        this.tool_button.click(function() {
+          if (_this.active) {
+            return _this.plot_view.eventSink.trigger("clear_active_tool");
+          } else {
+            return _this.plot_view.eventSink.trigger("active_tool", tool_name);
+          }
+        });
+        this.plot_view.eventSink.on("" + tool_name + ":deactivated", function() {
+          _this.active = false;
+          _this.tool_button.removeClass('active');
+          return _this.div.hide();
+        });
+        this.plot_view.eventSink.on("" + tool_name + ":activated", function() {
+          _this.active = true;
+          return _this.tool_button.addClass('active');
+        });
+        this.plot_view.canvas.bind("mousemove", function(e) {
+          var irh, irv, left, offset, top, vx, vy, xend, xstart, yend, ystart, _ref1;
+          if (!_this.active) {
+            return;
+          }
+          offset = $(e.currentTarget).offset();
+          left = offset != null ? offset.left : 0;
+          top = offset != null ? offset.top : 0;
+          e.bokehX = e.pageX - left;
+          e.bokehY = e.pageY - top;
+          _ref1 = _this.view_coords(e.bokehX, e.bokehY), vx = _ref1[0], vy = _ref1[1];
+          irh = _this.plot_view.view_state.get('inner_range_horizontal');
+          irv = _this.plot_view.view_state.get('inner_range_vertical');
+          xstart = irh.get('start');
+          xend = irh.get('end');
+          ystart = irv.get('start');
+          yend = irv.get('end');
+          if (vx < xstart || vx > xend || vy < ystart || vy > yend) {
+            _this.div.hide();
+            return;
+          }
+          return _this._select(vx, vy, e);
+        });
+        return this.plot_view.canvas_wrapper.css('cursor', 'crosshair');
+      };
+
+      HoverToolView.prototype.view_coords = function(sx, sy) {
+        var vx, vy, _ref1;
+        _ref1 = [this.plot_view.view_state.sx_to_vx(sx), this.plot_view.view_state.sy_to_vy(sy)], vx = _ref1[0], vy = _ref1[1];
+        return [vx, vy];
+      };
+
+      HoverToolView.prototype._select = function(vx, vy, e) {
+        var colname, color, column, column_name, datasource, datasource_id, datasource_selections, datasources, ds, dsvalue, geometry, hex, i, label, match, opts, renderer, row, selected, span, swatch, table, td, unused, value, x, y, _i, _j, _len, _len1, _ref1, _ref2, _ref3, _ref4, _ref5;
+        geometry = {
+          type: 'point',
+          vx: vx,
+          vy: vy
+        };
+        x = this.plot_view.xmapper.map_from_target(vx);
+        y = this.plot_view.ymapper.map_from_target(vy);
+        datasources = {};
+        datasource_selections = {};
+        _ref1 = this.mget_obj('renderers');
+        for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+          renderer = _ref1[_i];
+          datasource = renderer.get_obj('data_source');
+          datasources[datasource.id] = datasource;
+        }
+        _ref2 = this.mget_obj('renderers');
+        for (_j = 0, _len1 = _ref2.length; _j < _len1; _j++) {
+          renderer = _ref2[_j];
+          datasource_id = renderer.get_obj('data_source').id;
+          _.setdefault(datasource_selections, datasource_id, []);
+          selected = this.plot_view.renderers[renderer.id].hit_test(geometry);
+          ds = datasources[datasource_id];
+          if (selected === null) {
+            continue;
+          }
+          if (selected.length > 0) {
+            i = selected[0];
+            this.div.empty();
+            table = $('<table></table>');
+            _ref3 = this.mget("tooltips");
+            for (label in _ref3) {
+              value = _ref3[label];
+              row = $("<tr></tr>");
+              row.append($("<td class='bokeh_tooltip_row_label'>" + label + ": </td>"));
+              td = $("<td class='bokeh_tooltip_row_value'></td>");
+              if (value.indexOf("$color") >= 0) {
+                _ref4 = value.match(/\$color(\[.*\])?:(\w*)/), match = _ref4[0], opts = _ref4[1], colname = _ref4[2];
+                column = ds.getcolumn(colname);
+                if (column == null) {
+                  span = $("<span>" + colname + " unknown</span>");
+                  td.append(span);
+                  continue;
+                }
+                hex = (opts != null ? opts.indexOf("hex") : void 0) >= 0;
+                swatch = (opts != null ? opts.indexOf("swatch") : void 0) >= 0;
+                color = column[i];
+                if (color == null) {
+                  span = $("<span>(null)</span>");
+                  td.append(span);
+                  continue;
+                }
+                if (hex) {
+                  color = _color_to_hex(color);
+                }
+                span = $("<span>" + color + "</span>");
+                td.append(span);
+                if (swatch) {
+                  span = $("<span class='bokeh_tooltip_color_block'> </span>");
+                  span.css({
+                    backgroundColor: color
+                  });
+                }
+                td.append(span);
+              } else {
+                value = value.replace("$index", "" + i);
+                value = value.replace("$x", "" + (_format_number(x)));
+                value = value.replace("$y", "" + (_format_number(y)));
+                value = value.replace("$vx", "" + vx);
+                value = value.replace("$vy", "" + vy);
+                value = value.replace("$sx", "" + e.bokehX);
+                value = value.replace("$sy", "" + e.bokehY);
+                while (value.indexOf("@") >= 0) {
+                  _ref5 = value.match(/(@)(\w*)/), match = _ref5[0], unused = _ref5[1], column_name = _ref5[2];
+                  column = ds.getcolumn(column_name);
+                  if (column == null) {
+                    value = value.replace(column_name, "" + column_name + " unknown");
+                    break;
+                  }
+                  column = ds.getcolumn(column_name);
+                  dsvalue = column[i];
+                  if (typeof dsvalue === "number") {
+                    value = value.replace(match, "" + (_format_number(dsvalue)));
+                  } else {
+                    value = value.replace(match, "" + dsvalue);
+                  }
+                }
+                span = $("<span>" + value + "</span>");
+                td.append(span);
+              }
+              row.append(td);
+              table.append(row);
+            }
+            this.div.append(table);
+            this.div.css({
+              top: e.pageY - this.div.height() / 2,
+              left: e.pageX + 18
+            });
+            this.div.show();
+            break;
+          } else {
+            this.div.hide();
+          }
+          datasource_selections[datasource_id].push(selected);
+        }
+        return null;
+      };
+
+      return HoverToolView;
+
+    })(Tool.View);
+    HoverTool = (function(_super) {
+      __extends(HoverTool, _super);
+
+      function HoverTool() {
+        _ref1 = HoverTool.__super__.constructor.apply(this, arguments);
+        return _ref1;
+      }
+
+      HoverTool.prototype.default_view = HoverToolView;
+
+      HoverTool.prototype.type = "HoverTool";
+
+      HoverTool.prototype.dinitialize = function(attrs, options) {
+        var r;
+        HoverTool.__super__.dinitialize.call(this, attrs, options);
+        return this.set('renderers', (function() {
+          var _i, _len, _ref2, _results;
+          _ref2 = this.get_obj('plot').get('renderers');
+          _results = [];
+          for (_i = 0, _len = _ref2.length; _i < _len; _i++) {
+            r = _ref2[_i];
+            if (r.type === "Glyph") {
+              _results.push(r);
+            }
+          }
+          return _results;
+        }).call(this));
+      };
+
+      HoverTool.prototype.defaults = function() {
+        return _.extend(HoverTool.__super__.defaults.call(this), {
+          renderers: [],
+          tooltips: {
+            "index": "$index",
+            "data (x, y)": "($x, $y)",
+            "canvas (x, y)": "($sx, $sy)"
+          }
+        });
+      };
+
+      HoverTool.prototype.display_defaults = function() {
+        return HoverTool.__super__.display_defaults.call(this);
+      };
+
+      return HoverTool;
+
+    })(Tool.Model);
+    HoverTools = (function(_super) {
+      __extends(HoverTools, _super);
+
+      function HoverTools() {
+        _ref2 = HoverTools.__super__.constructor.apply(this, arguments);
+        return _ref2;
+      }
+
+      HoverTools.prototype.model = HoverTool;
+
+      return HoverTools;
+
+    })(Backbone.Collection);
+    return {
+      "Model": HoverTool,
+      "Collection": new HoverTools(),
+      "View": HoverToolView
+    };
+  });
+
+}).call(this);
+
+/*
+//@ sourceMappingURL=hover_tool.js.map
+*/;
+(function() {
+  var __hasProp = {}.hasOwnProperty,
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+  define('tool/pan_tool',["underscore", "backbone", "./tool", "./event_generators"], function(_, Backbone, Tool, EventGenerators) {
+    var PanTool, PanToolView, PanTools, TwoPointEventGenerator, _ref, _ref1, _ref2;
+    TwoPointEventGenerator = EventGenerators.TwoPointEventGenerator;
+    window.render_count = 0;
+    PanToolView = (function(_super) {
+      __extends(PanToolView, _super);
+
+      function PanToolView() {
+        _ref = PanToolView.__super__.constructor.apply(this, arguments);
+        return _ref;
+      }
+
+      PanToolView.prototype.initialize = function(options) {
+        return PanToolView.__super__.initialize.call(this, options);
+      };
+
+      PanToolView.prototype.bind_bokeh_events = function() {
+        return PanToolView.__super__.bind_bokeh_events.call(this);
+      };
+
+      PanToolView.prototype.eventGeneratorClass = TwoPointEventGenerator;
+
+      PanToolView.prototype.toolType = "PanTool";
+
+      PanToolView.prototype.evgen_options = {
+        keyName: null,
+        buttonText: "Pan",
+        cursor: "move",
+        auto_deactivate: true,
+        restrict_to_innercanvas: true
+      };
+
+      PanToolView.prototype.tool_events = {
+        UpdatingMouseMove: "_drag",
+        SetBasepoint: "_set_base_point"
+      };
+
+      PanToolView.prototype.mouse_coords = function(e, x, y) {
+        var x_, y_, _ref1;
+        _ref1 = [this.plot_view.view_state.sx_to_vx(x), this.plot_view.view_state.sy_to_vy(y)], x_ = _ref1[0], y_ = _ref1[1];
+        return [x_, y_];
+      };
+
+      PanToolView.prototype._set_base_point = function(e) {
+        var _ref1;
+        _ref1 = this.mouse_coords(e, e.bokehX, e.bokehY), this.x = _ref1[0], this.y = _ref1[1];
+        return null;
+      };
+
+      PanToolView.prototype._drag = function(e) {
+        var pan_info, sx_high, sx_low, sy_high, sy_low, x, xdiff, xend, xr, xstart, y, ydiff, yend, yr, ystart, _ref1, _ref2;
+        _ref1 = this.mouse_coords(e, e.bokehX, e.bokehY), x = _ref1[0], y = _ref1[1];
+        xdiff = x - this.x;
+        ydiff = y - this.y;
+        _ref2 = [x, y], this.x = _ref2[0], this.y = _ref2[1];
+        xr = this.plot_view.view_state.get('inner_range_horizontal');
+        sx_low = xr.get('start') - xdiff;
+        sx_high = xr.get('end') - xdiff;
+        yr = this.plot_view.view_state.get('inner_range_vertical');
+        sy_low = yr.get('start') - ydiff;
+        sy_high = yr.get('end') - ydiff;
+        xstart = this.plot_view.xmapper.map_from_target(sx_low);
+        xend = this.plot_view.xmapper.map_from_target(sx_high);
+        ystart = this.plot_view.ymapper.map_from_target(sy_low);
+        yend = this.plot_view.ymapper.map_from_target(sy_high);
+        pan_info = {
+          xr: {
+            start: xstart,
+            end: xend
+          },
+          yr: {
+            start: ystart,
+            end: yend
+          },
+          sdx: -xdiff,
+          sdy: ydiff
+        };
+        this.plot_view.update_range(pan_info);
+        return null;
+      };
+
+      return PanToolView;
+
+    })(Tool.View);
+    PanTool = (function(_super) {
+      __extends(PanTool, _super);
+
+      function PanTool() {
+        _ref1 = PanTool.__super__.constructor.apply(this, arguments);
+        return _ref1;
+      }
+
+      PanTool.prototype.default_view = PanToolView;
+
+      PanTool.prototype.type = "PanTool";
+
+      PanTool.prototype.defaults = function() {
+        return {
+          dimensions: []
+        };
+      };
+
+      PanTool.prototype.display_defaults = function() {
+        return PanTool.__super__.display_defaults.call(this);
+      };
+
+      return PanTool;
+
+    })(Tool.Model);
+    PanTools = (function(_super) {
+      __extends(PanTools, _super);
+
+      function PanTools() {
+        _ref2 = PanTools.__super__.constructor.apply(this, arguments);
+        return _ref2;
+      }
+
+      PanTools.prototype.model = PanTool;
+
+      return PanTools;
+
+    })(Backbone.Collection);
+    return {
+      "Model": PanTool,
+      "Collection": new PanTools(),
+      "View": PanToolView
+    };
+  });
+
+}).call(this);
+
+/*
+//@ sourceMappingURL=pan_tool.js.map
+*/;
 /* =========================================================
  * bootstrap-modal.js v2.0.4
  * http://twitter.github.com/bootstrap/javascript.html#modals
@@ -25202,11 +26157,8 @@ define("sprintf", (function (global) {
  * limitations under the License.
  * ========================================================= */
 
-
-!function ($) {
-
+define('modal',["jquery"], function($) {
    // jshint ;_;
-
 
  /* MODAL CLASS DEFINITION
   * ====================== */
@@ -25384,1588 +26336,13 @@ define("sprintf", (function (global) {
   }
 
   $.fn.modal.Constructor = Modal
-
-
- /* MODAL DATA-API
-  * ============== */
-
-  $(function () {
-    $('body').on('click.modal.data-api', '[data-toggle="modal"]', function ( e ) {
-      var $this = $(this), href
-        , $target = $($this.attr('data-target') || (href = $this.attr('href')) && href.replace(/.*(?=#[^\s]+$)/, '')) //strip for ie7
-        , option = $target.data('modal') ? 'toggle' : $.extend({}, $target.data(), $this.data())
-
-      e.preventDefault()
-      $target.modal(option)
-    })
-  })
-
-}(window.jQuery);
-/* ============================================================
- * bootstrap-dropdown.js v2.0.4
- * http://twitter.github.com/bootstrap/javascript.html#dropdowns
- * ============================================================
- * Copyright 2012 Twitter, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- * ============================================================ */
-
-
-!function ($) {
-
-   // jshint ;_;
-
-
- /* DROPDOWN CLASS DEFINITION
-  * ========================= */
-
-  var toggle = '[data-toggle="dropdown"]'
-    , Dropdown = function (element) {
-        var $el = $(element).on('click.dropdown.data-api', this.toggle)
-        $('html').on('click.dropdown.data-api', function () {
-          $el.parent().removeClass('open')
-        })
-      }
-
-  Dropdown.prototype = {
-
-    constructor: Dropdown
-
-  , toggle: function (e) {
-      var $this = $(this)
-        , $parent
-        , selector
-        , isActive
-
-      if ($this.is('.disabled, :disabled')) return
-
-      selector = $this.attr('data-target')
-
-      if (!selector) {
-        selector = $this.attr('href')
-        selector = selector && selector.replace(/.*(?=#[^\s]*$)/, '') //strip for ie7
-      }
-
-      $parent = $(selector)
-      $parent.length || ($parent = $this.parent())
-
-      isActive = $parent.hasClass('open')
-
-      clearMenus()
-
-      if (!isActive) $parent.toggleClass('open')
-
-      return false
-    }
-
-  }
-
-  function clearMenus() {
-    $(toggle).parent().removeClass('open')
-  }
-
-
-  /* DROPDOWN PLUGIN DEFINITION
-   * ========================== */
-
-  $.fn.dropdown = function (option) {
-    return this.each(function () {
-      var $this = $(this)
-        , data = $this.data('dropdown')
-      if (!data) $this.data('dropdown', (data = new Dropdown(this)))
-      if (typeof option == 'string') data[option].call($this)
-    })
-  }
-
-  $.fn.dropdown.Constructor = Dropdown
-
-
-  /* APPLY TO STANDARD DROPDOWN ELEMENTS
-   * =================================== */
-
-  $(function () {
-    $('html').on('click.dropdown.data-api', clearMenus)
-    $('body')
-      .on('click.dropdown', '.dropdown form', function (e) { e.stopPropagation() })
-      .on('click.dropdown.data-api', toggle, Dropdown.prototype.toggle)
-  })
-
-}(window.jQuery);
-/* =============================================================
- * bootstrap-scrollspy.js v2.0.4
- * http://twitter.github.com/bootstrap/javascript.html#scrollspy
- * =============================================================
- * Copyright 2012 Twitter, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- * ============================================================== */
-
-
-!function ($) {
-
-   // jshint ;_;
-
-
-  /* SCROLLSPY CLASS DEFINITION
-   * ========================== */
-
-  function ScrollSpy( element, options) {
-    var process = $.proxy(this.process, this)
-      , $element = $(element).is('body') ? $(window) : $(element)
-      , href
-    this.options = $.extend({}, $.fn.scrollspy.defaults, options)
-    this.$scrollElement = $element.on('scroll.scroll.data-api', process)
-    this.selector = (this.options.target
-      || ((href = $(element).attr('href')) && href.replace(/.*(?=#[^\s]+$)/, '')) //strip for ie7
-      || '') + ' .nav li > a'
-    this.$body = $('body')
-    this.refresh()
-    this.process()
-  }
-
-  ScrollSpy.prototype = {
-
-      constructor: ScrollSpy
-
-    , refresh: function () {
-        var self = this
-          , $targets
-
-        this.offsets = $([])
-        this.targets = $([])
-
-        $targets = this.$body
-          .find(this.selector)
-          .map(function () {
-            var $el = $(this)
-              , href = $el.data('target') || $el.attr('href')
-              , $href = /^#\w/.test(href) && $(href)
-            return ( $href
-              && href.length
-              && [[ $href.position().top, href ]] ) || null
-          })
-          .sort(function (a, b) { return a[0] - b[0] })
-          .each(function () {
-            self.offsets.push(this[0])
-            self.targets.push(this[1])
-          })
-      }
-
-    , process: function () {
-        var scrollTop = this.$scrollElement.scrollTop() + this.options.offset
-          , scrollHeight = this.$scrollElement[0].scrollHeight || this.$body[0].scrollHeight
-          , maxScroll = scrollHeight - this.$scrollElement.height()
-          , offsets = this.offsets
-          , targets = this.targets
-          , activeTarget = this.activeTarget
-          , i
-
-        if (scrollTop >= maxScroll) {
-          return activeTarget != (i = targets.last()[0])
-            && this.activate ( i )
-        }
-
-        for (i = offsets.length; i--;) {
-          activeTarget != targets[i]
-            && scrollTop >= offsets[i]
-            && (!offsets[i + 1] || scrollTop <= offsets[i + 1])
-            && this.activate( targets[i] )
-        }
-      }
-
-    , activate: function (target) {
-        var active
-          , selector
-
-        this.activeTarget = target
-
-        $(this.selector)
-          .parent('.active')
-          .removeClass('active')
-
-        selector = this.selector
-          + '[data-target="' + target + '"],'
-          + this.selector + '[href="' + target + '"]'
-
-        active = $(selector)
-          .parent('li')
-          .addClass('active')
-
-        if (active.parent('.dropdown-menu'))  {
-          active = active.closest('li.dropdown').addClass('active')
-        }
-
-        active.trigger('activate')
-      }
-
-  }
-
-
- /* SCROLLSPY PLUGIN DEFINITION
-  * =========================== */
-
-  $.fn.scrollspy = function ( option ) {
-    return this.each(function () {
-      var $this = $(this)
-        , data = $this.data('scrollspy')
-        , options = typeof option == 'object' && option
-      if (!data) $this.data('scrollspy', (data = new ScrollSpy(this, options)))
-      if (typeof option == 'string') data[option]()
-    })
-  }
-
-  $.fn.scrollspy.Constructor = ScrollSpy
-
-  $.fn.scrollspy.defaults = {
-    offset: 10
-  }
-
-
- /* SCROLLSPY DATA-API
-  * ================== */
-
-  $(function () {
-    $('[data-spy="scroll"]').each(function () {
-      var $spy = $(this)
-      $spy.scrollspy($spy.data())
-    })
-  })
-
-}(window.jQuery);
-/* ========================================================
- * bootstrap-tab.js v2.0.4
- * http://twitter.github.com/bootstrap/javascript.html#tabs
- * ========================================================
- * Copyright 2012 Twitter, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- * ======================================================== */
-
-
-!function ($) {
-
-   // jshint ;_;
-
-
- /* TAB CLASS DEFINITION
-  * ==================== */
-
-  var Tab = function ( element ) {
-    this.element = $(element)
-  }
-
-  Tab.prototype = {
-
-    constructor: Tab
-
-  , show: function () {
-      var $this = this.element
-      , $ul = $this.closest('ul:not(.dropdown-menu)')
-        , selector = $this.attr('data-target')
-        , previous
-        , $target
-        , e
-
-      if (!selector) {
-        selector = $this.attr('href')
-        selector = selector && selector.replace(/.*(?=#[^\s]*$)/, '') //strip for ie7
-      }
-
-      if ( $this.parent('li').hasClass('active') ) return
-
-      previous = $ul.find('.active a').last()[0]
-
-      e = $.Event('show', {
-        relatedTarget: previous
-      })
-
-      $this.trigger(e)
-
-      if (e.isDefaultPrevented()) return
-
-      $target = $(selector)
-
-      this.activate($this.parent('li'), $ul)
-      this.activate($target, $target.parent(), function () {
-        $this.trigger({
-          type: 'shown'
-        , relatedTarget: previous
-        })
-      })
-    }
-
-  , activate: function ( element, container, callback) {
-      var $active = container.find('> .active')
-        , transition = callback
-            && $.support.transition
-            && $active.hasClass('fade')
-
-      function next() {
-        $active
-          .removeClass('active')
-          .find('> .dropdown-menu > .active')
-          .removeClass('active')
-
-        element.addClass('active')
-
-        if (transition) {
-          element[0].offsetWidth // reflow for transition
-          element.addClass('in')
-        } else {
-          element.removeClass('fade')
-        }
-
-        if ( element.parent('.dropdown-menu') ) {
-          element.closest('li.dropdown').addClass('active')
-        }
-
-        callback && callback()
-      }
-
-      transition ?
-        $active.one($.support.transition.end, next) :
-        next()
-
-      $active.removeClass('in')
-    }
-  }
-
-
- /* TAB PLUGIN DEFINITION
-  * ===================== */
-
-  $.fn.tab = function ( option ) {
-    return this.each(function () {
-      var $this = $(this)
-        , data = $this.data('tab')
-      if (!data) $this.data('tab', (data = new Tab(this)))
-      if (typeof option == 'string') data[option]()
-    })
-  }
-
-  $.fn.tab.Constructor = Tab
-
-
- /* TAB DATA-API
-  * ============ */
-
-  $(function () {
-    $('body').on('click.tab.data-api', '[data-toggle="tab"], [data-toggle="pill"]', function (e) {
-      e.preventDefault()
-      $(this).tab('show')
-    })
-  })
-
-}(window.jQuery);
-/* ===========================================================
- * bootstrap-tooltip.js v2.0.4
- * http://twitter.github.com/bootstrap/javascript.html#tooltips
- * Inspired by the original jQuery.tipsy by Jason Frame
- * ===========================================================
- * Copyright 2012 Twitter, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- * ========================================================== */
-
-
-!function ($) {
-
-   // jshint ;_;
-
-
- /* TOOLTIP PUBLIC CLASS DEFINITION
-  * =============================== */
-
-  var Tooltip = function (element, options) {
-    this.init('tooltip', element, options)
-  }
-
-  Tooltip.prototype = {
-
-    constructor: Tooltip
-
-  , init: function (type, element, options) {
-      var eventIn
-        , eventOut
-
-      this.type = type
-      this.$element = $(element)
-      this.options = this.getOptions(options)
-      this.enabled = true
-
-      if (this.options.trigger != 'manual') {
-        eventIn  = this.options.trigger == 'hover' ? 'mouseenter' : 'focus'
-        eventOut = this.options.trigger == 'hover' ? 'mouseleave' : 'blur'
-        this.$element.on(eventIn, this.options.selector, $.proxy(this.enter, this))
-        this.$element.on(eventOut, this.options.selector, $.proxy(this.leave, this))
-      }
-
-      this.options.selector ?
-        (this._options = $.extend({}, this.options, { trigger: 'manual', selector: '' })) :
-        this.fixTitle()
-    }
-
-  , getOptions: function (options) {
-      options = $.extend({}, $.fn[this.type].defaults, options, this.$element.data())
-
-      if (options.delay && typeof options.delay == 'number') {
-        options.delay = {
-          show: options.delay
-        , hide: options.delay
-        }
-      }
-
-      return options
-    }
-
-  , enter: function (e) {
-      var self = $(e.currentTarget)[this.type](this._options).data(this.type)
-
-      if (!self.options.delay || !self.options.delay.show) return self.show()
-
-      clearTimeout(this.timeout)
-      self.hoverState = 'in'
-      this.timeout = setTimeout(function() {
-        if (self.hoverState == 'in') self.show()
-      }, self.options.delay.show)
-    }
-
-  , leave: function (e) {
-      var self = $(e.currentTarget)[this.type](this._options).data(this.type)
-
-      if (this.timeout) clearTimeout(this.timeout)
-      if (!self.options.delay || !self.options.delay.hide) return self.hide()
-
-      self.hoverState = 'out'
-      this.timeout = setTimeout(function() {
-        if (self.hoverState == 'out') self.hide()
-      }, self.options.delay.hide)
-    }
-
-  , show: function () {
-      var $tip
-        , inside
-        , pos
-        , actualWidth
-        , actualHeight
-        , placement
-        , tp
-
-      if (this.hasContent() && this.enabled) {
-        $tip = this.tip()
-        this.setContent()
-
-        if (this.options.animation) {
-          $tip.addClass('fade')
-        }
-
-        placement = typeof this.options.placement == 'function' ?
-          this.options.placement.call(this, $tip[0], this.$element[0]) :
-          this.options.placement
-
-        inside = /in/.test(placement)
-
-        $tip
-          .remove()
-          .css({ top: 0, left: 0, display: 'block' })
-          .appendTo(inside ? this.$element : document.body)
-
-        pos = this.getPosition(inside)
-
-        actualWidth = $tip[0].offsetWidth
-        actualHeight = $tip[0].offsetHeight
-
-        switch (inside ? placement.split(' ')[1] : placement) {
-          case 'bottom':
-            tp = {top: pos.top + pos.height, left: pos.left + pos.width / 2 - actualWidth / 2}
-            break
-          case 'top':
-            tp = {top: pos.top - actualHeight, left: pos.left + pos.width / 2 - actualWidth / 2}
-            break
-          case 'left':
-            tp = {top: pos.top + pos.height / 2 - actualHeight / 2, left: pos.left - actualWidth}
-            break
-          case 'right':
-            tp = {top: pos.top + pos.height / 2 - actualHeight / 2, left: pos.left + pos.width}
-            break
-        }
-
-        $tip
-          .css(tp)
-          .addClass(placement)
-          .addClass('in')
-      }
-    }
-
-  , isHTML: function(text) {
-      // html string detection logic adapted from jQuery
-      return typeof text != 'string'
-        || ( text.charAt(0) === "<"
-          && text.charAt( text.length - 1 ) === ">"
-          && text.length >= 3
-        ) || /^(?:[^<]*<[\w\W]+>[^>]*$)/.exec(text)
-    }
-
-  , setContent: function () {
-      var $tip = this.tip()
-        , title = this.getTitle()
-
-      $tip.find('.tooltip-inner')[this.isHTML(title) ? 'html' : 'text'](title)
-      $tip.removeClass('fade in top bottom left right')
-    }
-
-  , hide: function () {
-      var that = this
-        , $tip = this.tip()
-
-      $tip.removeClass('in')
-
-      function removeWithAnimation() {
-        var timeout = setTimeout(function () {
-          $tip.off($.support.transition.end).remove()
-        }, 500)
-
-        $tip.one($.support.transition.end, function () {
-          clearTimeout(timeout)
-          $tip.remove()
-        })
-      }
-
-      $.support.transition && this.$tip.hasClass('fade') ?
-        removeWithAnimation() :
-        $tip.remove()
-    }
-
-  , fixTitle: function () {
-      var $e = this.$element
-      if ($e.attr('title') || typeof($e.attr('data-original-title')) != 'string') {
-        $e.attr('data-original-title', $e.attr('title') || '').removeAttr('title')
-      }
-    }
-
-  , hasContent: function () {
-      return this.getTitle()
-    }
-
-  , getPosition: function (inside) {
-      return $.extend({}, (inside ? {top: 0, left: 0} : this.$element.offset()), {
-        width: this.$element[0].offsetWidth
-      , height: this.$element[0].offsetHeight
-      })
-    }
-
-  , getTitle: function () {
-      var title
-        , $e = this.$element
-        , o = this.options
-
-      title = $e.attr('data-original-title')
-        || (typeof o.title == 'function' ? o.title.call($e[0]) :  o.title)
-
-      return title
-    }
-
-  , tip: function () {
-      return this.$tip = this.$tip || $(this.options.template)
-    }
-
-  , validate: function () {
-      if (!this.$element[0].parentNode) {
-        this.hide()
-        this.$element = null
-        this.options = null
-      }
-    }
-
-  , enable: function () {
-      this.enabled = true
-    }
-
-  , disable: function () {
-      this.enabled = false
-    }
-
-  , toggleEnabled: function () {
-      this.enabled = !this.enabled
-    }
-
-  , toggle: function () {
-      this[this.tip().hasClass('in') ? 'hide' : 'show']()
-    }
-
-  }
-
-
- /* TOOLTIP PLUGIN DEFINITION
-  * ========================= */
-
-  $.fn.tooltip = function ( option ) {
-    return this.each(function () {
-      var $this = $(this)
-        , data = $this.data('tooltip')
-        , options = typeof option == 'object' && option
-      if (!data) $this.data('tooltip', (data = new Tooltip(this, options)))
-      if (typeof option == 'string') data[option]()
-    })
-  }
-
-  $.fn.tooltip.Constructor = Tooltip
-
-  $.fn.tooltip.defaults = {
-    animation: true
-  , placement: 'top'
-  , selector: false
-  , template: '<div class="tooltip"><div class="tooltip-arrow"></div><div class="tooltip-inner"></div></div>'
-  , trigger: 'hover'
-  , title: ''
-  , delay: 0
-  }
-
-}(window.jQuery);
-
-/* ===========================================================
- * bootstrap-popover.js v2.0.4
- * http://twitter.github.com/bootstrap/javascript.html#popovers
- * ===========================================================
- * Copyright 2012 Twitter, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- * =========================================================== */
-
-
-!function ($) {
-
-   // jshint ;_;
-
-
- /* POPOVER PUBLIC CLASS DEFINITION
-  * =============================== */
-
-  var Popover = function ( element, options ) {
-    this.init('popover', element, options)
-  }
-
-
-  /* NOTE: POPOVER EXTENDS BOOTSTRAP-TOOLTIP.js
-     ========================================== */
-
-  Popover.prototype = $.extend({}, $.fn.tooltip.Constructor.prototype, {
-
-    constructor: Popover
-
-  , setContent: function () {
-      var $tip = this.tip()
-        , title = this.getTitle()
-        , content = this.getContent()
-
-      $tip.find('.popover-title')[this.isHTML(title) ? 'html' : 'text'](title)
-      $tip.find('.popover-content > *')[this.isHTML(content) ? 'html' : 'text'](content)
-
-      $tip.removeClass('fade top bottom left right in')
-    }
-
-  , hasContent: function () {
-      return this.getTitle() || this.getContent()
-    }
-
-  , getContent: function () {
-      var content
-        , $e = this.$element
-        , o = this.options
-
-      content = $e.attr('data-content')
-        || (typeof o.content == 'function' ? o.content.call($e[0]) :  o.content)
-
-      return content
-    }
-
-  , tip: function () {
-      if (!this.$tip) {
-        this.$tip = $(this.options.template)
-      }
-      return this.$tip
-    }
-
-  })
-
-
- /* POPOVER PLUGIN DEFINITION
-  * ======================= */
-
-  $.fn.popover = function (option) {
-    return this.each(function () {
-      var $this = $(this)
-        , data = $this.data('popover')
-        , options = typeof option == 'object' && option
-      if (!data) $this.data('popover', (data = new Popover(this, options)))
-      if (typeof option == 'string') data[option]()
-    })
-  }
-
-  $.fn.popover.Constructor = Popover
-
-  $.fn.popover.defaults = $.extend({} , $.fn.tooltip.defaults, {
-    placement: 'right'
-  , content: ''
-  , template: '<div class="popover"><div class="arrow"></div><div class="popover-inner"><h3 class="popover-title"></h3><div class="popover-content"><p></p></div></div></div>'
-  })
-
-}(window.jQuery);
-/* ==========================================================
- * bootstrap-alert.js v2.0.4
- * http://twitter.github.com/bootstrap/javascript.html#alerts
- * ==========================================================
- * Copyright 2012 Twitter, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- * ========================================================== */
-
-
-!function ($) {
-
-   // jshint ;_;
-
-
- /* ALERT CLASS DEFINITION
-  * ====================== */
-
-  var dismiss = '[data-dismiss="alert"]'
-    , Alert = function (el) {
-        $(el).on('click', dismiss, this.close)
-      }
-
-  Alert.prototype.close = function (e) {
-    var $this = $(this)
-      , selector = $this.attr('data-target')
-      , $parent
-
-    if (!selector) {
-      selector = $this.attr('href')
-      selector = selector && selector.replace(/.*(?=#[^\s]*$)/, '') //strip for ie7
-    }
-
-    $parent = $(selector)
-
-    e && e.preventDefault()
-
-    $parent.length || ($parent = $this.hasClass('alert') ? $this : $this.parent())
-
-    $parent.trigger(e = $.Event('close'))
-
-    if (e.isDefaultPrevented()) return
-
-    $parent.removeClass('in')
-
-    function removeElement() {
-      $parent
-        .trigger('closed')
-        .remove()
-    }
-
-    $.support.transition && $parent.hasClass('fade') ?
-      $parent.on($.support.transition.end, removeElement) :
-      removeElement()
-  }
-
-
- /* ALERT PLUGIN DEFINITION
-  * ======================= */
-
-  $.fn.alert = function (option) {
-    return this.each(function () {
-      var $this = $(this)
-        , data = $this.data('alert')
-      if (!data) $this.data('alert', (data = new Alert(this)))
-      if (typeof option == 'string') data[option].call($this)
-    })
-  }
-
-  $.fn.alert.Constructor = Alert
-
-
- /* ALERT DATA-API
-  * ============== */
-
-  $(function () {
-    $('body').on('click.alert.data-api', dismiss, Alert.prototype.close)
-  })
-
-}(window.jQuery);
-/* ============================================================
- * bootstrap-button.js v2.0.4
- * http://twitter.github.com/bootstrap/javascript.html#buttons
- * ============================================================
- * Copyright 2012 Twitter, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- * ============================================================ */
-
-
-!function ($) {
-
-   // jshint ;_;
-
-
- /* BUTTON PUBLIC CLASS DEFINITION
-  * ============================== */
-
-  var Button = function (element, options) {
-    this.$element = $(element)
-    this.options = $.extend({}, $.fn.button.defaults, options)
-  }
-
-  Button.prototype.setState = function (state) {
-    var d = 'disabled'
-      , $el = this.$element
-      , data = $el.data()
-      , val = $el.is('input') ? 'val' : 'html'
-
-    state = state + 'Text'
-    data.resetText || $el.data('resetText', $el[val]())
-
-    $el[val](data[state] || this.options[state])
-
-    // push to event loop to allow forms to submit
-    setTimeout(function () {
-      state == 'loadingText' ?
-        $el.addClass(d).attr(d, d) :
-        $el.removeClass(d).removeAttr(d)
-    }, 0)
-  }
-
-  Button.prototype.toggle = function () {
-    var $parent = this.$element.parent('[data-toggle="buttons-radio"]')
-
-    $parent && $parent
-      .find('.active')
-      .removeClass('active')
-
-    this.$element.toggleClass('active')
-  }
-
-
- /* BUTTON PLUGIN DEFINITION
-  * ======================== */
-
-  $.fn.button = function (option) {
-    return this.each(function () {
-      var $this = $(this)
-        , data = $this.data('button')
-        , options = typeof option == 'object' && option
-      if (!data) $this.data('button', (data = new Button(this, options)))
-      if (option == 'toggle') data.toggle()
-      else if (option) data.setState(option)
-    })
-  }
-
-  $.fn.button.defaults = {
-    loadingText: 'loading...'
-  }
-
-  $.fn.button.Constructor = Button
-
-
- /* BUTTON DATA-API
-  * =============== */
-
-  $(function () {
-    $('body').on('click.button.data-api', '[data-toggle^=button]', function ( e ) {
-      var $btn = $(e.target)
-      if (!$btn.hasClass('btn')) $btn = $btn.closest('.btn')
-      $btn.button('toggle')
-    })
-  })
-
-}(window.jQuery);
-/* =============================================================
- * bootstrap-collapse.js v2.0.4
- * http://twitter.github.com/bootstrap/javascript.html#collapse
- * =============================================================
- * Copyright 2012 Twitter, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- * ============================================================ */
-
-
-!function ($) {
-
-   // jshint ;_;
-
-
- /* COLLAPSE PUBLIC CLASS DEFINITION
-  * ================================ */
-
-  var Collapse = function (element, options) {
-    this.$element = $(element)
-    this.options = $.extend({}, $.fn.collapse.defaults, options)
-
-    if (this.options.parent) {
-      this.$parent = $(this.options.parent)
-    }
-
-    this.options.toggle && this.toggle()
-  }
-
-  Collapse.prototype = {
-
-    constructor: Collapse
-
-  , dimension: function () {
-      var hasWidth = this.$element.hasClass('width')
-      return hasWidth ? 'width' : 'height'
-    }
-
-  , show: function () {
-      var dimension
-        , scroll
-        , actives
-        , hasData
-
-      if (this.transitioning) return
-
-      dimension = this.dimension()
-      scroll = $.camelCase(['scroll', dimension].join('-'))
-      actives = this.$parent && this.$parent.find('> .accordion-group > .in')
-
-      if (actives && actives.length) {
-        hasData = actives.data('collapse')
-        if (hasData && hasData.transitioning) return
-        actives.collapse('hide')
-        hasData || actives.data('collapse', null)
-      }
-
-      this.$element[dimension](0)
-      this.transition('addClass', $.Event('show'), 'shown')
-      this.$element[dimension](this.$element[0][scroll])
-    }
-
-  , hide: function () {
-      var dimension
-      if (this.transitioning) return
-      dimension = this.dimension()
-      this.reset(this.$element[dimension]())
-      this.transition('removeClass', $.Event('hide'), 'hidden')
-      this.$element[dimension](0)
-    }
-
-  , reset: function (size) {
-      var dimension = this.dimension()
-
-      this.$element
-        .removeClass('collapse')
-        [dimension](size || 'auto')
-        [0].offsetWidth
-
-      this.$element[size !== null ? 'addClass' : 'removeClass']('collapse')
-
-      return this
-    }
-
-  , transition: function (method, startEvent, completeEvent) {
-      var that = this
-        , complete = function () {
-            if (startEvent.type == 'show') that.reset()
-            that.transitioning = 0
-            that.$element.trigger(completeEvent)
-          }
-
-      this.$element.trigger(startEvent)
-
-      if (startEvent.isDefaultPrevented()) return
-
-      this.transitioning = 1
-
-      this.$element[method]('in')
-
-      $.support.transition && this.$element.hasClass('collapse') ?
-        this.$element.one($.support.transition.end, complete) :
-        complete()
-    }
-
-  , toggle: function () {
-      this[this.$element.hasClass('in') ? 'hide' : 'show']()
-    }
-
-  }
-
-
- /* COLLAPSIBLE PLUGIN DEFINITION
-  * ============================== */
-
-  $.fn.collapse = function (option) {
-    return this.each(function () {
-      var $this = $(this)
-        , data = $this.data('collapse')
-        , options = typeof option == 'object' && option
-      if (!data) $this.data('collapse', (data = new Collapse(this, options)))
-      if (typeof option == 'string') data[option]()
-    })
-  }
-
-  $.fn.collapse.defaults = {
-    toggle: true
-  }
-
-  $.fn.collapse.Constructor = Collapse
-
-
- /* COLLAPSIBLE DATA-API
-  * ==================== */
-
-  $(function () {
-    $('body').on('click.collapse.data-api', '[data-toggle=collapse]', function ( e ) {
-      var $this = $(this), href
-        , target = $this.attr('data-target')
-          || e.preventDefault()
-          || (href = $this.attr('href')) && href.replace(/.*(?=#[^\s]+$)/, '') //strip for ie7
-        , option = $(target).data('collapse') ? 'toggle' : $this.data()
-      $(target).collapse(option)
-    })
-  })
-
-}(window.jQuery);
-/* ==========================================================
- * bootstrap-carousel.js v2.0.4
- * http://twitter.github.com/bootstrap/javascript.html#carousel
- * ==========================================================
- * Copyright 2012 Twitter, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- * ========================================================== */
-
-
-!function ($) {
-
-   // jshint ;_;
-
-
- /* CAROUSEL CLASS DEFINITION
-  * ========================= */
-
-  var Carousel = function (element, options) {
-    this.$element = $(element)
-    this.options = options
-    this.options.slide && this.slide(this.options.slide)
-    this.options.pause == 'hover' && this.$element
-      .on('mouseenter', $.proxy(this.pause, this))
-      .on('mouseleave', $.proxy(this.cycle, this))
-  }
-
-  Carousel.prototype = {
-
-    cycle: function (e) {
-      if (!e) this.paused = false
-      this.options.interval
-        && !this.paused
-        && (this.interval = setInterval($.proxy(this.next, this), this.options.interval))
-      return this
-    }
-
-  , to: function (pos) {
-      var $active = this.$element.find('.active')
-        , children = $active.parent().children()
-        , activePos = children.index($active)
-        , that = this
-
-      if (pos > (children.length - 1) || pos < 0) return
-
-      if (this.sliding) {
-        return this.$element.one('slid', function () {
-          that.to(pos)
-        })
-      }
-
-      if (activePos == pos) {
-        return this.pause().cycle()
-      }
-
-      return this.slide(pos > activePos ? 'next' : 'prev', $(children[pos]))
-    }
-
-  , pause: function (e) {
-      if (!e) this.paused = true
-      clearInterval(this.interval)
-      this.interval = null
-      return this
-    }
-
-  , next: function () {
-      if (this.sliding) return
-      return this.slide('next')
-    }
-
-  , prev: function () {
-      if (this.sliding) return
-      return this.slide('prev')
-    }
-
-  , slide: function (type, next) {
-      var $active = this.$element.find('.active')
-        , $next = next || $active[type]()
-        , isCycling = this.interval
-        , direction = type == 'next' ? 'left' : 'right'
-        , fallback  = type == 'next' ? 'first' : 'last'
-        , that = this
-        , e = $.Event('slide')
-
-      this.sliding = true
-
-      isCycling && this.pause()
-
-      $next = $next.length ? $next : this.$element.find('.item')[fallback]()
-
-      if ($next.hasClass('active')) return
-
-      if ($.support.transition && this.$element.hasClass('slide')) {
-        this.$element.trigger(e)
-        if (e.isDefaultPrevented()) return
-        $next.addClass(type)
-        $next[0].offsetWidth // force reflow
-        $active.addClass(direction)
-        $next.addClass(direction)
-        this.$element.one($.support.transition.end, function () {
-          $next.removeClass([type, direction].join(' ')).addClass('active')
-          $active.removeClass(['active', direction].join(' '))
-          that.sliding = false
-          setTimeout(function () { that.$element.trigger('slid') }, 0)
-        })
-      } else {
-        this.$element.trigger(e)
-        if (e.isDefaultPrevented()) return
-        $active.removeClass('active')
-        $next.addClass('active')
-        this.sliding = false
-        this.$element.trigger('slid')
-      }
-
-      isCycling && this.cycle()
-
-      return this
-    }
-
-  }
-
-
- /* CAROUSEL PLUGIN DEFINITION
-  * ========================== */
-
-  $.fn.carousel = function (option) {
-    return this.each(function () {
-      var $this = $(this)
-        , data = $this.data('carousel')
-        , options = $.extend({}, $.fn.carousel.defaults, typeof option == 'object' && option)
-      if (!data) $this.data('carousel', (data = new Carousel(this, options)))
-      if (typeof option == 'number') data.to(option)
-      else if (typeof option == 'string' || (option = options.slide)) data[option]()
-      else if (options.interval) data.cycle()
-    })
-  }
-
-  $.fn.carousel.defaults = {
-    interval: 5000
-  , pause: 'hover'
-  }
-
-  $.fn.carousel.Constructor = Carousel
-
-
- /* CAROUSEL DATA-API
-  * ================= */
-
-  $(function () {
-    $('body').on('click.carousel.data-api', '[data-slide]', function ( e ) {
-      var $this = $(this), href
-        , $target = $($this.attr('data-target') || (href = $this.attr('href')) && href.replace(/.*(?=#[^\s]+$)/, '')) //strip for ie7
-        , options = !$target.data('modal') && $.extend({}, $target.data(), $this.data())
-      $target.carousel(options)
-      e.preventDefault()
-    })
-  })
-
-}(window.jQuery);
-/* =============================================================
- * bootstrap-typeahead.js v2.0.4
- * http://twitter.github.com/bootstrap/javascript.html#typeahead
- * =============================================================
- * Copyright 2012 Twitter, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- * ============================================================ */
-
-
-!function($){
-
-   // jshint ;_;
-
-
- /* TYPEAHEAD PUBLIC CLASS DEFINITION
-  * ================================= */
-
-  var Typeahead = function (element, options) {
-    this.$element = $(element)
-    this.options = $.extend({}, $.fn.typeahead.defaults, options)
-    this.matcher = this.options.matcher || this.matcher
-    this.sorter = this.options.sorter || this.sorter
-    this.highlighter = this.options.highlighter || this.highlighter
-    this.updater = this.options.updater || this.updater
-    this.$menu = $(this.options.menu).appendTo('body')
-    this.source = this.options.source
-    this.shown = false
-    this.listen()
-  }
-
-  Typeahead.prototype = {
-
-    constructor: Typeahead
-
-  , select: function () {
-      var val = this.$menu.find('.active').attr('data-value')
-      this.$element
-        .val(this.updater(val))
-        .change()
-      return this.hide()
-    }
-
-  , updater: function (item) {
-      return item
-    }
-
-  , show: function () {
-      var pos = $.extend({}, this.$element.offset(), {
-        height: this.$element[0].offsetHeight
-      })
-
-      this.$menu.css({
-        top: pos.top + pos.height
-      , left: pos.left
-      })
-
-      this.$menu.show()
-      this.shown = true
-      return this
-    }
-
-  , hide: function () {
-      this.$menu.hide()
-      this.shown = false
-      return this
-    }
-
-  , lookup: function (event) {
-      var that = this
-        , items
-        , q
-
-      this.query = this.$element.val()
-
-      if (!this.query) {
-        return this.shown ? this.hide() : this
-      }
-
-      items = $.grep(this.source, function (item) {
-        return that.matcher(item)
-      })
-
-      items = this.sorter(items)
-
-      if (!items.length) {
-        return this.shown ? this.hide() : this
-      }
-
-      return this.render(items.slice(0, this.options.items)).show()
-    }
-
-  , matcher: function (item) {
-      return ~item.toLowerCase().indexOf(this.query.toLowerCase())
-    }
-
-  , sorter: function (items) {
-      var beginswith = []
-        , caseSensitive = []
-        , caseInsensitive = []
-        , item
-
-      while (item = items.shift()) {
-        if (!item.toLowerCase().indexOf(this.query.toLowerCase())) beginswith.push(item)
-        else if (~item.indexOf(this.query)) caseSensitive.push(item)
-        else caseInsensitive.push(item)
-      }
-
-      return beginswith.concat(caseSensitive, caseInsensitive)
-    }
-
-  , highlighter: function (item) {
-      var query = this.query.replace(/[\-\[\]{}()*+?.,\\\^$|#\s]/g, '\\$&')
-      return item.replace(new RegExp('(' + query + ')', 'ig'), function ($1, match) {
-        return '<strong>' + match + '</strong>'
-      })
-    }
-
-  , render: function (items) {
-      var that = this
-
-      items = $(items).map(function (i, item) {
-        i = $(that.options.item).attr('data-value', item)
-        i.find('a').html(that.highlighter(item))
-        return i[0]
-      })
-
-      items.first().addClass('active')
-      this.$menu.html(items)
-      return this
-    }
-
-  , next: function (event) {
-      var active = this.$menu.find('.active').removeClass('active')
-        , next = active.next()
-
-      if (!next.length) {
-        next = $(this.$menu.find('li')[0])
-      }
-
-      next.addClass('active')
-    }
-
-  , prev: function (event) {
-      var active = this.$menu.find('.active').removeClass('active')
-        , prev = active.prev()
-
-      if (!prev.length) {
-        prev = this.$menu.find('li').last()
-      }
-
-      prev.addClass('active')
-    }
-
-  , listen: function () {
-      this.$element
-        .on('blur',     $.proxy(this.blur, this))
-        .on('keypress', $.proxy(this.keypress, this))
-        .on('keyup',    $.proxy(this.keyup, this))
-
-      if ($.browser.webkit || $.browser.msie) {
-        this.$element.on('keydown', $.proxy(this.keypress, this))
-      }
-
-      this.$menu
-        .on('click', $.proxy(this.click, this))
-        .on('mouseenter', 'li', $.proxy(this.mouseenter, this))
-    }
-
-  , keyup: function (e) {
-      switch(e.keyCode) {
-        case 40: // down arrow
-        case 38: // up arrow
-          break
-
-        case 9: // tab
-        case 13: // enter
-          if (!this.shown) return
-          this.select()
-          break
-
-        case 27: // escape
-          if (!this.shown) return
-          this.hide()
-          break
-
-        default:
-          this.lookup()
-      }
-
-      e.stopPropagation()
-      e.preventDefault()
-  }
-
-  , keypress: function (e) {
-      if (!this.shown) return
-
-      switch(e.keyCode) {
-        case 9: // tab
-        case 13: // enter
-        case 27: // escape
-          e.preventDefault()
-          break
-
-        case 38: // up arrow
-          if (e.type != 'keydown') break
-          e.preventDefault()
-          this.prev()
-          break
-
-        case 40: // down arrow
-          if (e.type != 'keydown') break
-          e.preventDefault()
-          this.next()
-          break
-      }
-
-      e.stopPropagation()
-    }
-
-  , blur: function (e) {
-      var that = this
-      setTimeout(function () { that.hide() }, 150)
-    }
-
-  , click: function (e) {
-      e.stopPropagation()
-      e.preventDefault()
-      this.select()
-    }
-
-  , mouseenter: function (e) {
-      this.$menu.find('.active').removeClass('active')
-      $(e.currentTarget).addClass('active')
-    }
-
-  }
-
-
-  /* TYPEAHEAD PLUGIN DEFINITION
-   * =========================== */
-
-  $.fn.typeahead = function (option) {
-    return this.each(function () {
-      var $this = $(this)
-        , data = $this.data('typeahead')
-        , options = typeof option == 'object' && option
-      if (!data) $this.data('typeahead', (data = new Typeahead(this, options)))
-      if (typeof option == 'string') data[option]()
-    })
-  }
-
-  $.fn.typeahead.defaults = {
-    source: []
-  , items: 8
-  , menu: '<ul class="typeahead dropdown-menu"></ul>'
-  , item: '<li><a href="#"></a></li>'
-  }
-
-  $.fn.typeahead.Constructor = Typeahead
-
-
- /* TYPEAHEAD DATA-API
-  * ================== */
-
-  $(function () {
-    $('body').on('focus.typeahead.data-api', '[data-provide="typeahead"]', function (e) {
-      var $this = $(this)
-      if ($this.data('typeahead')) return
-      e.preventDefault()
-      $this.typeahead($this.data())
-    })
-  })
-
-}(window.jQuery);
-
-define("bootstrap", function(){});
+});
 
 (function() {
   var __hasProp = {}.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
-  define('tool/preview_save_tool',["underscore", "jquery", "backbone", "common/bulk_save", "./tool", "./event_generators", "bootstrap"], function(_, $, Backbone, bulk_save, Tool, EventGenerators) {
+  define('tool/preview_save_tool',["underscore", "jquery", "modal", "backbone", "common/bulk_save", "./tool", "./event_generators"], function(_, $, $$1, Backbone, bulk_save, Tool, EventGenerators) {
     var ButtonEventGenerator, PreviewSaveTool, PreviewSaveToolView, PreviewSaveTools, _ref, _ref1, _ref2;
     ButtonEventGenerator = EventGenerators.ButtonEventGenerator;
     PreviewSaveToolView = (function(_super) {
@@ -27064,108 +26441,390 @@ define("bootstrap", function(){});
   var __hasProp = {}.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
-  define('tool/embed_tool',["underscore", "backbone", "./tool", "./event_generators"], function(_, Backbone, Tool, EventGenerators) {
-    var ButtonEventGenerator, EmbedTool, EmbedToolView, EmbedTools, escapeHTML, _ref, _ref1, _ref2;
+  define('tool/reset_tool',["underscore", "backbone", "./tool", "./event_generators"], function(_, Backbone, Tool, EventGenerators) {
+    var ButtonEventGenerator, ResetTool, ResetToolView, ResetTools, _ref, _ref1, _ref2;
     ButtonEventGenerator = EventGenerators.ButtonEventGenerator;
-    escapeHTML = function(unsafe_str) {
-      return unsafe_str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;').replace(/\'/g, '&#39;');
-    };
-    EmbedToolView = (function(_super) {
-      __extends(EmbedToolView, _super);
+    ResetToolView = (function(_super) {
+      __extends(ResetToolView, _super);
 
-      function EmbedToolView() {
-        _ref = EmbedToolView.__super__.constructor.apply(this, arguments);
+      function ResetToolView() {
+        _ref = ResetToolView.__super__.constructor.apply(this, arguments);
         return _ref;
       }
 
-      EmbedToolView.prototype.initialize = function(options) {
-        return EmbedToolView.__super__.initialize.call(this, options);
+      ResetToolView.prototype.initialize = function(options) {
+        return ResetToolView.__super__.initialize.call(this, options);
       };
 
-      EmbedToolView.prototype.eventGeneratorClass = ButtonEventGenerator;
+      ResetToolView.prototype.eventGeneratorClass = ButtonEventGenerator;
 
-      EmbedToolView.prototype.evgen_options = {
-        buttonText: "Embed Html"
+      ResetToolView.prototype.evgen_options = {
+        buttonText: "Reset View"
       };
 
-      EmbedToolView.prototype.toolType = "EmbedTool";
+      ResetToolView.prototype.toolType = "ResetTool";
 
-      EmbedToolView.prototype.tool_events = {
-        activated: "_activated",
-        deactivated: "_close_modal"
+      ResetToolView.prototype.tool_events = {
+        activated: "_activated"
       };
 
-      EmbedToolView.prototype._activated = function(e) {
-        var baseurl, doc_apikey, doc_id, modal, model_id, script_inject_escaped,
-          _this = this;
-        console.log("EmbedToolView._activated");
-        window.tool_view = this;
-        model_id = this.plot_model.get('id');
-        doc_id = this.plot_model.get('doc');
-        doc_apikey = this.plot_model.get('docapikey');
-        baseurl = this.plot_model.get('baseurl');
-        script_inject_escaped = escapeHTML(this.plot_model.get('script_inject_snippet'));
-        modal = "<div id=\"embedModal\" class=\"bokeh\">\n  <div  class=\"modal\" role=\"dialog\" aria-labelledby=\"embedLabel\" aria-hidden=\"true\">\n    <div class=\"modal-header\">\n      <button type=\"button\" class=\"close\" data-dismiss=\"modal\" aria-hidden=\"true\">×</button>\n      <h3 id=\"dataConfirmLabel\"> HTML Embed code</h3></div><div class=\"modal-body\">\n      <div class=\"modal-body\">\n        " + script_inject_escaped + "\n      </div>\n    </div>\n    <div class=\"modal-footer\">\n      <button class=\"btn\" data-dismiss=\"modal\" aria-hidden=\"true\">Close</button>\n    </div>\n  </div>\n</div>";
-        $('body').append(modal);
-        $('#embedModal > .modal').on('hidden', function() {
+      ResetToolView.prototype._activated = function(e) {
+        var _this = this;
+        this.plot_view.update_range();
+        return _.delay((function() {
           return _this.plot_view.eventSink.trigger("clear_active_tool");
-        });
-        return $('#embedModal > .modal').modal({
-          show: true
-        });
+        }), 100);
       };
 
-      EmbedToolView.prototype._close_modal = function() {
-        $('#embedModal').remove();
-        return $('#embedModal > .modal').remove();
-      };
-
-      return EmbedToolView;
+      return ResetToolView;
 
     })(Tool.View);
-    EmbedTool = (function(_super) {
-      __extends(EmbedTool, _super);
+    ResetTool = (function(_super) {
+      __extends(ResetTool, _super);
 
-      function EmbedTool() {
-        _ref1 = EmbedTool.__super__.constructor.apply(this, arguments);
+      function ResetTool() {
+        _ref1 = ResetTool.__super__.constructor.apply(this, arguments);
         return _ref1;
       }
 
-      EmbedTool.prototype.default_view = EmbedToolView;
+      ResetTool.prototype.default_view = ResetToolView;
 
-      EmbedTool.prototype.type = "EmbedTool";
+      ResetTool.prototype.type = "ResetTool";
 
-      return EmbedTool;
+      return ResetTool;
 
     })(Tool.Model);
-    EmbedTools = (function(_super) {
-      __extends(EmbedTools, _super);
+    ResetTools = (function(_super) {
+      __extends(ResetTools, _super);
 
-      function EmbedTools() {
-        _ref2 = EmbedTools.__super__.constructor.apply(this, arguments);
+      function ResetTools() {
+        _ref2 = ResetTools.__super__.constructor.apply(this, arguments);
         return _ref2;
       }
 
-      EmbedTools.prototype.model = EmbedTool;
+      ResetTools.prototype.model = ResetTool;
 
-      EmbedTools.prototype.display_defaults = function() {
-        return EmbedTools.__super__.display_defaults.call(this);
+      ResetTools.prototype.display_defaults = function() {
+        return ResetTools.__super__.display_defaults.call(this);
       };
 
-      return EmbedTools;
+      return ResetTools;
 
     })(Backbone.Collection);
     return {
-      "Model": EmbedTool,
-      "Collection": new EmbedTools(),
-      "View": EmbedToolView
+      "Model": ResetTool,
+      "Collection": new ResetTools(),
+      "View": ResetToolView
     };
   });
 
 }).call(this);
 
 /*
-//@ sourceMappingURL=embed_tool.js.map
+//@ sourceMappingURL=reset_tool.js.map
+*/;
+(function() {
+  var __hasProp = {}.hasOwnProperty,
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+  define('tool/resize_tool',["underscore", "backbone", "./tool", "./event_generators"], function(_, Backbone, Tool, EventGenerators) {
+    var ResizeTool, ResizeToolView, ResizeTools, TwoPointEventGenerator, _ref, _ref1, _ref2;
+    TwoPointEventGenerator = EventGenerators.TwoPointEventGenerator;
+    ResizeToolView = (function(_super) {
+      __extends(ResizeToolView, _super);
+
+      function ResizeToolView() {
+        _ref = ResizeToolView.__super__.constructor.apply(this, arguments);
+        return _ref;
+      }
+
+      ResizeToolView.prototype.initialize = function(options) {
+        ResizeToolView.__super__.initialize.call(this, options);
+        return this.active = false;
+      };
+
+      ResizeToolView.prototype.bind_events = function(plotview) {
+        return ResizeToolView.__super__.bind_events.call(this, plotview);
+      };
+
+      ResizeToolView.prototype.eventGeneratorClass = TwoPointEventGenerator;
+
+      ResizeToolView.prototype.toolType = "ResizeTool";
+
+      ResizeToolView.prototype.evgen_options = {
+        keyName: "",
+        buttonText: "Resize",
+        cursor: "move"
+      };
+
+      ResizeToolView.prototype.tool_events = {
+        activated: "_activate",
+        deactivated: "_deactivate",
+        UpdatingMouseMove: "_drag",
+        SetBasepoint: "_set_base_point"
+      };
+
+      ResizeToolView.prototype.render = function() {
+        var ch, ctx, cw, line_width;
+        if (!this.active) {
+          return;
+        }
+        ctx = this.plot_view.ctx;
+        cw = this.plot_view.view_state.get('canvas_width');
+        ch = this.plot_view.view_state.get('canvas_height');
+        line_width = 8;
+        ctx.save();
+        ctx.strokeStyle = 'grey';
+        ctx.globalAlpha = 0.7;
+        ctx.lineWidth = line_width;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.rect(line_width, line_width, cw - line_width * 2, ch - line_width * 2);
+        ctx.moveTo(line_width, line_width);
+        ctx.lineTo(cw - line_width, ch - line_width);
+        ctx.moveTo(line_width, ch - line_width);
+        ctx.lineTo(cw - line_width, line_width);
+        ctx.stroke();
+        return ctx.restore();
+      };
+
+      ResizeToolView.prototype.mouse_coords = function(e, x, y) {
+        return [x, y];
+      };
+
+      ResizeToolView.prototype._activate = function(e) {
+        var bbar, ch, cw;
+        if (this.active) {
+          return;
+        }
+        this.active = true;
+        this.popup = $('<div class="resize_popup pull-right"\nstyle="border-radius: 10px; background-color: lightgrey; padding:3px 8px; font-size: 14px;\nposition:absolute; right:20px; top: 20px; "></div>');
+        bbar = this.plot_view.$el.find('.bokeh_canvas_wrapper');
+        this.popup.appendTo(bbar);
+        ch = this.plot_view.view_state.get('outer_height');
+        cw = this.plot_view.view_state.get('outer_width');
+        this.popup.text("width: " + cw + " height: " + ch);
+        this.request_render();
+        this.plot_view.request_render();
+        return null;
+      };
+
+      ResizeToolView.prototype._deactivate = function(e) {
+        this.active = false;
+        this.popup.remove();
+        this.request_render();
+        this.plot_view.request_render();
+        return null;
+      };
+
+      ResizeToolView.prototype._set_base_point = function(e) {
+        var _ref1;
+        _ref1 = this.mouse_coords(e, e.bokehX, e.bokehY), this.x = _ref1[0], this.y = _ref1[1];
+        return null;
+      };
+
+      ResizeToolView.prototype._drag = function(e) {
+        var ch, cw, x, xdiff, y, ydiff, _ref1, _ref2;
+        this.plot_view.pause();
+        _ref1 = this.mouse_coords(e, e.bokehX, e.bokehY), x = _ref1[0], y = _ref1[1];
+        xdiff = x - this.x;
+        ydiff = y - this.y;
+        _ref2 = [x, y], this.x = _ref2[0], this.y = _ref2[1];
+        ch = this.plot_view.view_state.get('outer_height');
+        cw = this.plot_view.view_state.get('outer_width');
+        this.popup.text("width: " + cw + " height: " + ch);
+        this.plot_view.view_state.set('outer_height', ch + ydiff, {
+          'silent': true
+        });
+        this.plot_view.view_state.set('outer_width', cw + xdiff, {
+          'silent': true
+        });
+        this.plot_view.view_state.set('canvas_height', ch + ydiff, {
+          'silent': true
+        });
+        this.plot_view.view_state.set('canvas_width', cw + xdiff, {
+          'silent': true
+        });
+        this.plot_view.view_state.trigger('change:outer_height', ch + ydiff);
+        this.plot_view.view_state.trigger('change:outer_width', cw + xdiff);
+        this.plot_view.view_state.trigger('change:canvas_height', ch + ydiff);
+        this.plot_view.view_state.trigger('change:canvas_width', cw + xdiff);
+        this.plot_view.view_state.trigger('change', this.plot_view.view_state);
+        this.plot_view.unpause(true);
+        return null;
+      };
+
+      return ResizeToolView;
+
+    })(Tool.View);
+    ResizeTool = (function(_super) {
+      __extends(ResizeTool, _super);
+
+      function ResizeTool() {
+        _ref1 = ResizeTool.__super__.constructor.apply(this, arguments);
+        return _ref1;
+      }
+
+      ResizeTool.prototype.default_view = ResizeToolView;
+
+      ResizeTool.prototype.type = "ResizeTool";
+
+      ResizeTool.prototype.display_defaults = function() {
+        return ResizeTool.__super__.display_defaults.call(this);
+      };
+
+      return ResizeTool;
+
+    })(Tool.Model);
+    ResizeTools = (function(_super) {
+      __extends(ResizeTools, _super);
+
+      function ResizeTools() {
+        _ref2 = ResizeTools.__super__.constructor.apply(this, arguments);
+        return _ref2;
+      }
+
+      ResizeTools.prototype.model = ResizeTool;
+
+      return ResizeTools;
+
+    })(Backbone.Collection);
+    return {
+      "Model": ResizeTool,
+      "Collection": new ResizeTools(),
+      "View": ResizeToolView
+    };
+  });
+
+}).call(this);
+
+/*
+//@ sourceMappingURL=resize_tool.js.map
+*/;
+(function() {
+  var __hasProp = {}.hasOwnProperty,
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+  define('tool/wheel_zoom_tool',["underscore", "backbone", "./tool", "./event_generators"], function(_, Backbone, Tool, EventGenerators) {
+    var OnePointWheelEventGenerator, WheelZoomTool, WheelZoomToolView, WheelZoomTools, _ref, _ref1, _ref2;
+    OnePointWheelEventGenerator = EventGenerators.OnePointWheelEventGenerator;
+    WheelZoomToolView = (function(_super) {
+      __extends(WheelZoomToolView, _super);
+
+      function WheelZoomToolView() {
+        _ref = WheelZoomToolView.__super__.constructor.apply(this, arguments);
+        return _ref;
+      }
+
+      WheelZoomToolView.prototype.initialize = function(options) {
+        return WheelZoomToolView.__super__.initialize.call(this, options);
+      };
+
+      WheelZoomToolView.prototype.eventGeneratorClass = OnePointWheelEventGenerator;
+
+      WheelZoomToolView.prototype.evgen_options = {
+        buttonText: "WheelZoom"
+      };
+
+      WheelZoomToolView.prototype.tool_events = {
+        zoom: "_zoom"
+      };
+
+      WheelZoomToolView.prototype.mouse_coords = function(e, x, y) {
+        var x_, y_, _ref1;
+        _ref1 = [this.plot_view.view_state.sx_to_vx(x), this.plot_view.view_state.sy_to_vy(y)], x_ = _ref1[0], y_ = _ref1[1];
+        return [x_, y_];
+      };
+
+      WheelZoomToolView.prototype._zoom = function(e) {
+        var delta, factor, screenX, screenY, speed, sx_high, sx_low, sy_high, sy_low, x, xend, xr, xstart, y, yend, yr, ystart, zoom_info, _ref1, _ref2, _ref3;
+        delta = e.originalEvent.wheelDelta;
+        screenX = e.bokehX;
+        screenY = e.bokehY;
+        _ref1 = this.mouse_coords(e, screenX, screenY), x = _ref1[0], y = _ref1[1];
+        speed = this.mget('speed');
+        factor = speed * delta;
+        if (factor > 0.9) {
+          factor = 0.9;
+        } else if (factor < -0.9) {
+          factor = -0.9;
+        }
+        xr = this.plot_view.view_state.get('inner_range_horizontal');
+        sx_low = xr.get('start');
+        sx_high = xr.get('end');
+        yr = this.plot_view.view_state.get('inner_range_vertical');
+        sy_low = yr.get('start');
+        sy_high = yr.get('end');
+        _ref2 = this.plot_view.xmapper.v_map_from_target([sx_low - (sx_low - x) * factor, sx_high - (sx_high - x) * factor]), xstart = _ref2[0], xend = _ref2[1];
+        _ref3 = this.plot_view.ymapper.v_map_from_target([sy_low - (sy_low - y) * factor, sy_high - (sy_high - y) * factor]), ystart = _ref3[0], yend = _ref3[1];
+        zoom_info = {
+          xr: {
+            start: xstart,
+            end: xend
+          },
+          yr: {
+            start: ystart,
+            end: yend
+          },
+          factor: factor
+        };
+        this.plot_view.update_range(zoom_info);
+        return null;
+      };
+
+      return WheelZoomToolView;
+
+    })(Tool.View);
+    WheelZoomTool = (function(_super) {
+      __extends(WheelZoomTool, _super);
+
+      function WheelZoomTool() {
+        _ref1 = WheelZoomTool.__super__.constructor.apply(this, arguments);
+        return _ref1;
+      }
+
+      WheelZoomTool.prototype.default_view = WheelZoomToolView;
+
+      WheelZoomTool.prototype.type = "WheelZoomTool";
+
+      WheelZoomTool.prototype.defaults = function() {
+        return {
+          dimensions: [],
+          speed: 1 / 600
+        };
+      };
+
+      return WheelZoomTool;
+
+    })(Tool.Model);
+    WheelZoomTools = (function(_super) {
+      __extends(WheelZoomTools, _super);
+
+      function WheelZoomTools() {
+        _ref2 = WheelZoomTools.__super__.constructor.apply(this, arguments);
+        return _ref2;
+      }
+
+      WheelZoomTools.prototype.model = WheelZoomTool;
+
+      WheelZoomTools.prototype.display_defaults = function() {
+        return WheelZoomTools.__super__.display_defaults.call(this);
+      };
+
+      return WheelZoomTools;
+
+    })(Backbone.Collection);
+    return {
+      "Model": WheelZoomTool,
+      "Collection": new WheelZoomTools(),
+      "View": WheelZoomToolView
+    };
+  });
+
+}).call(this);
+
+/*
+//@ sourceMappingURL=wheel_zoom_tool.js.map
 */;
 (function() {
   var __hasProp = {}.hasOwnProperty,
@@ -28064,7 +27723,7 @@ define('widget/pandas/pandas_pivot_template',[],function(){
 //@ sourceMappingURL=pandas_plot_source.js.map
 */;
 (function() {
-  define('common/base',["underscore", "require", "common/custom", "common/plot", "common/gmap_plot", "common/grid_plot", "common/plot_context", "range/range1d", "range/data_range1d", "range/factor_range", "range/data_factor_range", "renderer/glyph/glyph_factory", "renderer/guide/linear_axis", "renderer/guide/datetime_axis", "renderer/guide/grid", "renderer/annotation/legend", "renderer/overlay/box_selection", "source/object_array_data_source", "source/column_data_source", "tool/pan_tool", "tool/wheel_zoom_tool", "tool/resize_tool", "tool/crosshair_tool", "tool/box_select_tool", "tool/data_range_box_select_tool", "tool/preview_save_tool", "tool/embed_tool", "widget/data_slider", "widget/pandas/ipython_remote_data", "widget/pandas/pandas_pivot_table", "widget/pandas/pandas_plot_source"], function(_, require) {
+  define('common/base',["underscore", "require", "common/custom", "common/gmap_plot", "common/grid_plot", "common/plot", "common/plot_context", "range/data_factor_range", "range/data_range1d", "range/factor_range", "range/range1d", "renderer/annotation/legend", "renderer/glyph/glyph_factory", "renderer/guide/categorical_axis", "renderer/guide/datetime_axis", "renderer/guide/grid", "renderer/guide/linear_axis", "renderer/overlay/box_selection", "source/column_data_source", "tool/box_select_tool", "tool/box_zoom_tool", "tool/crosshair_tool", "tool/data_range_box_select_tool", "tool/embed_tool", "tool/hover_tool", "tool/pan_tool", "tool/preview_save_tool", "tool/reset_tool", "tool/resize_tool", "tool/wheel_zoom_tool", "widget/data_slider", "widget/pandas/ipython_remote_data", "widget/pandas/pandas_pivot_table", "widget/pandas/pandas_plot_source"], function(_, require) {
     var Collections, Config, locations, mod_cache;
     require("common/custom").monkey_patch();
     Config = {
@@ -28077,26 +27736,29 @@ define('widget/pandas/pandas_pivot_template',[],function(){
       CDXPlotContext: 'common/plot_context',
       PlotContext: 'common/plot_context',
       PlotList: 'common/plot_context',
-      Range1d: 'range/range1d',
+      DataFactorRange: 'range/data_factor_range',
       DataRange1d: 'range/data_range1d',
       FactorRange: 'range/factor_range',
-      DataFactorRange: 'range/data_factor_range',
+      Range1d: 'range/range1d',
       Glyph: 'renderer/glyph/glyph_factory',
       LinearAxis: 'renderer/guide/linear_axis',
+      CategoricalAxis: 'renderer/guide/categorical_axis',
       DatetimeAxis: 'renderer/guide/datetime_axis',
       Grid: 'renderer/guide/grid',
       Legend: 'renderer/annotation/legend',
       BoxSelection: 'renderer/overlay/box_selection',
-      ObjectArrayDataSource: 'source/object_array_data_source',
       ColumnDataSource: 'source/column_data_source',
       PanTool: 'tool/pan_tool',
       WheelZoomTool: 'tool/wheel_zoom_tool',
       ResizeTool: 'tool/resize_tool',
       CrosshairTool: 'tool/crosshair_tool',
       BoxSelectTool: 'tool/box_select_tool',
+      BoxZoomTool: 'tool/box_zoom_tool',
+      HoverTool: 'tool/hover_tool',
       DataRangeBoxSelectTool: 'tool/data_range_box_select_tool',
       PreviewSaveTool: 'tool/preview_save_tool',
       EmbedTool: 'tool/embed_tool',
+      ResetTool: 'tool/reset_tool',
       DataSlider: 'widget/data_slider',
       IPythonRemoteData: 'widget/pandas/ipython_remote_data',
       PandasPivotTable: 'widget/pandas/pandas_pivot_table',
@@ -28129,7 +27791,7 @@ define('widget/pandas/pandas_pivot_template',[],function(){
 //@ sourceMappingURL=base.js.map
 */;
 (function() {
-  define('common/plotting',["underscore", "jquery", "./plot", "range/data_range1d", "range/range1d", "renderer/annotation/legend", "renderer/glyph/glyph_factory", "renderer/guide/linear_axis", "renderer/guide/grid", "renderer/overlay/box_selection", "source/column_data_source", "tool/box_select_tool", "tool/pan_tool", "tool/preview_save_tool", "tool/resize_tool", "tool/wheel_zoom_tool", "renderer/guide/datetime_axis"], function(_, $, Plot, DataRange1d, Range1d, Legend, GlyphFactory, LinearAxis, Grid, BoxSelection, ColumnDataSource, BoxSelectTool, PanTool, PreviewSaveTool, ResizeTool, WheelZoomTool, DatetimeAxis) {
+  define('common/plotting',["underscore", "jquery", "./plot", "range/data_range1d", "range/factor_range", "range/range1d", "renderer/annotation/legend", "renderer/glyph/glyph_factory", "renderer/guide/categorical_axis", "renderer/guide/linear_axis", "renderer/guide/grid", "renderer/overlay/box_selection", "source/column_data_source", "tool/box_select_tool", "tool/box_zoom_tool", "tool/hover_tool", "tool/pan_tool", "tool/preview_save_tool", "tool/resize_tool", "tool/wheel_zoom_tool", "tool/reset_tool", "renderer/guide/datetime_axis"], function(_, $, Plot, DataRange1d, FactorRange, Range1d, Legend, GlyphFactory, CategoricalAxis, LinearAxis, Grid, BoxSelection, ColumnDataSource, BoxSelectTool, BoxZoomTool, HoverTool, PanTool, PreviewSaveTool, ResizeTool, WheelZoomTool, ResetTool, DatetimeAxis) {
     var add_axes, add_grids, add_legend, add_tools, create_glyphs, create_range, create_sources, make_plot, show;
     create_sources = function(data) {
       var d, sources, _i, _len;
@@ -28166,13 +27828,19 @@ define('widget/pandas/pandas_pivot_template',[],function(){
             return _results;
           })()
         });
-      } else if (range instanceof Range1d.Model) {
+      } else if ((range instanceof Range1d.Model) || (range instanceof FactorRange.Model)) {
         return range;
       } else {
-        return Range1d.Collection.create({
-          start: range[0],
-          end: range[1]
-        });
+        if (typeof range[0] === "string") {
+          return FactorRange.Collection.create({
+            factors: range
+          });
+        } else {
+          return Range1d.Collection.create({
+            start: range[0],
+            end: range[1]
+          });
+        }
       }
     };
     create_glyphs = function(plot, glyphspecs, sources, nonselection_glyphspecs) {
@@ -28223,8 +27891,8 @@ define('widget/pandas/pandas_pivot_template',[],function(){
       }
       return glyphs;
     };
-    add_axes = function(plot, xaxes, yaxes) {
-      var a, axes, axis, loc, _i, _j, _k, _len, _len1, _len2, _ref;
+    add_axes = function(plot, xaxes, yaxes, xdr, ydr) {
+      var a, axes, axis, loc, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _m, _ref;
       axes = [];
       if (xaxes) {
         if (xaxes === true) {
@@ -28246,9 +27914,21 @@ define('widget/pandas/pandas_pivot_template',[],function(){
             });
             axes.push(axis);
           }
-        } else {
+        } else if (xdr.type === "FactorRange") {
           for (_j = 0, _len1 = xaxes.length; _j < _len1; _j++) {
             loc = xaxes[_j];
+            axis = CategoricalAxis.Collection.create({
+              dimension: 0,
+              axis_label: 'x',
+              location: loc,
+              parent: plot.ref(),
+              plot: plot.ref()
+            });
+            axes.push(axis);
+          }
+        } else {
+          for (_k = 0, _len2 = xaxes.length; _k < _len2; _k++) {
+            loc = xaxes[_k];
             axis = LinearAxis.Collection.create({
               dimension: 0,
               axis_label: 'x',
@@ -28267,23 +27947,37 @@ define('widget/pandas/pandas_pivot_template',[],function(){
         if (!_.isArray(yaxes)) {
           yaxes = [yaxes];
         }
-        for (_k = 0, _len2 = yaxes.length; _k < _len2; _k++) {
-          loc = yaxes[_k];
-          axis = LinearAxis.Collection.create({
-            dimension: 1,
-            axis_label: 'y',
-            location: loc,
-            parent: plot.ref(),
-            plot: plot.ref()
-          });
-          axes.push(axis);
+        if (ydr.type === "FactorRange") {
+          for (_l = 0, _len3 = xaxes.length; _l < _len3; _l++) {
+            loc = xaxes[_l];
+            axis = CategoricalAxis.Collection.create({
+              dimension: 1,
+              axis_label: 'y',
+              location: loc,
+              parent: plot.ref(),
+              plot: plot.ref()
+            });
+            axes.push(axis);
+          }
+        } else {
+          for (_m = 0, _len4 = yaxes.length; _m < _len4; _m++) {
+            loc = yaxes[_m];
+            axis = LinearAxis.Collection.create({
+              dimension: 1,
+              axis_label: 'y',
+              location: loc,
+              parent: plot.ref(),
+              plot: plot.ref()
+            });
+            axes.push(axis);
+          }
         }
       }
       return plot.add_renderers((function() {
-        var _l, _len3, _results;
+        var _len5, _n, _results;
         _results = [];
-        for (_l = 0, _len3 = axes.length; _l < _len3; _l++) {
-          a = axes[_l];
+        for (_n = 0, _len5 = axes.length; _n < _len5; _n++) {
+          a = axes[_n];
           _results.push(a.ref());
         }
         return _results;
@@ -28324,12 +28018,12 @@ define('widget/pandas/pandas_pivot_template',[],function(){
       }
     };
     add_tools = function(plot, tools, glyphs, xdr, ydr) {
-      var added_tools, g, pan_tool, preview_tool, resize_tool, select_overlay, select_tool, wheel_zoom_tool;
+      var added_tools, box_zoom_overlay, box_zoom_tool, g, hover_tool, pan_tool, preview_tool, reset_tool, resize_tool, select_overlay, select_tool, wheel_zoom_tool;
       if (tools === false) {
         return;
       }
       if (tools === true) {
-        tools = "pan,wheel_zoom,select,resize,preview";
+        tools = "pan,wheel_zoom,select,resize,preview,reset,box_zoom";
       }
       added_tools = [];
       if (tools.indexOf("pan") > -1) {
@@ -28345,6 +28039,20 @@ define('widget/pandas/pandas_pivot_template',[],function(){
           dimensions: ['width', 'height']
         });
         added_tools.push(wheel_zoom_tool);
+      }
+      if (tools.indexOf("hover") > -1) {
+        hover_tool = HoverTool.Collection.create({
+          renderers: (function() {
+            var _i, _len, _results;
+            _results = [];
+            for (_i = 0, _len = glyphs.length; _i < _len; _i++) {
+              g = glyphs[_i];
+              _results.push(g.ref());
+            }
+            return _results;
+          })()
+        });
+        added_tools.push(hover_tool);
       }
       if (tools.indexOf("select") > -1) {
         select_tool = BoxSelectTool.Collection.create({
@@ -28371,6 +28079,18 @@ define('widget/pandas/pandas_pivot_template',[],function(){
       if (tools.indexOf("preview") > -1) {
         preview_tool = PreviewSaveTool.Collection.create();
         added_tools.push(preview_tool);
+      }
+      if (tools.indexOf("reset") > -1) {
+        reset_tool = ResetTool.Collection.create();
+        added_tools.push(reset_tool);
+      }
+      if (tools.indexOf("box_zoom") > -1) {
+        box_zoom_tool = BoxZoomTool.Collection.create();
+        box_zoom_overlay = BoxSelection.Collection.create({
+          tool: box_zoom_tool.ref()
+        });
+        added_tools.push(box_zoom_tool);
+        plot.add_renderers([box_zoom_overlay.ref()]);
       }
       return plot.set_obj('tools', added_tools);
     };
@@ -28449,7 +28169,7 @@ define('widget/pandas/pandas_pivot_template',[],function(){
         }
         return _results;
       })());
-      add_axes(plot, xaxes, yaxes);
+      add_axes(plot, xaxes, yaxes, xdr, ydr);
       add_grids(plot, xgrid, ygrid, xaxes === 'datetime');
       add_tools(plot, tools, glyphs, xdr, ydr);
       add_legend(plot, legend, glyphs);
@@ -29553,14 +29273,14 @@ define('server/usercontext/wrappertemplate',[],function(){
 //@ sourceMappingURL=serverrun.js.map
 */;
 (function() {
-  define('main',['require','exports','module','common/base','common/base','common/gmap_plot','common/grid_plot','common/has_parent','common/has_properties','common/plot','common/plotting','common/affine','common/build_views','common/bulk_save','common/continuum_view','common/grid_view_state','common/load_models','common/plot_context','common/plot_widget','common/png_view','common/random','common/safebind','common/svg_colors','common/ticking','common/view_state','mapper/1d/linear_mapper','mapper/2d/grid_mapper','mapper/color/linear_color_mapper','palettes/palettes','renderer/annotation/legend','renderer/glyph/glyph','renderer/glyph/glyph_factory','renderer/guide/datetime_axis','renderer/guide/grid','renderer/guide/linear_axis','renderer/overlay/box_selection','renderer/properties','server/embed_core','server/serverrun','server/serverutils','source/column_data_source','source/object_array_data_source','tool/box_select_tool','tool/data_range_box_select_tool','tool/embed_tool','tool/pan_tool','tool/preview_save_tool','tool/resize_tool','tool/crosshair_tool','tool/wheel_zoom_tool','widget/data_slider','server/serverrun'],function(require, exports, module) {
+  define('main',['require','exports','module','common/base','common/base','common/gmap_plot','common/grid_plot','common/has_parent','common/has_properties','common/plot','common/plotting','common/affine','common/build_views','common/bulk_save','common/continuum_view','common/grid_view_state','common/load_models','common/plot_context','common/plot_widget','common/png_view','common/random','common/safebind','common/svg_colors','common/ticking','common/view_state','mapper/1d/linear_mapper','mapper/1d/categorical_mapper','mapper/2d/grid_mapper','mapper/color/linear_color_mapper','palettes/palettes','renderer/annotation/legend','renderer/glyph/glyph','renderer/glyph/glyph_factory','renderer/guide/categorical_axis','renderer/guide/datetime_axis','renderer/guide/grid','renderer/guide/linear_axis','renderer/overlay/box_selection','renderer/properties','server/embed_core','server/serverrun','server/serverutils','source/column_data_source','tool/box_select_tool','tool/box_zoom_tool','tool/crosshair_tool','tool/data_range_box_select_tool','tool/embed_tool','tool/hover_tool','tool/pan_tool','tool/preview_save_tool','tool/reset_tool','tool/resize_tool','tool/wheel_zoom_tool','widget/data_slider','server/serverrun'],function(require, exports, module) {
     var Bokeh, glyph_factory;
     if (!window.Float64Array) {
       console.warn("Float64Array is not supported. Using generic Array instead.");
       window.Float64Array = Array;
     }
     Bokeh = {};
-    Bokeh.version = '0.3.0';
+    Bokeh.version = '0.4.2';
     Bokeh.Collections = require("common/base").Collections;
     Bokeh.Config = require("common/base").Collections;
     Bokeh.GMapPlot = require("common/gmap_plot");
@@ -29584,6 +29304,7 @@ define('server/usercontext/wrappertemplate',[],function(){
     Bokeh.ticking = require("common/ticking");
     Bokeh.ViewState = require("common/view_state");
     Bokeh.LinearMapper = require("mapper/1d/linear_mapper");
+    Bokeh.CategoricalMapper = require("mapper/1d/categorical_mapper");
     Bokeh.GridMapper = require("mapper/2d/grid_mapper");
     Bokeh.LinearColorMapper = require("mapper/color/linear_color_mapper");
     Bokeh.Palettes = require("palettes/palettes");
@@ -29622,6 +29343,7 @@ define('server/usercontext/wrappertemplate',[],function(){
     Bokeh.Triangle = glyph_factory.triangle;
     Bokeh.Wedge = glyph_factory.wedge;
     Bokeh.X = glyph_factory.x;
+    Bokeh.CategoricalAxis = require("renderer/guide/categorical_axis");
     Bokeh.DatetimeAxis = require("renderer/guide/datetime_axis");
     Bokeh.Grid = require("renderer/guide/grid");
     Bokeh.LinearAxis = require("renderer/guide/linear_axis");
@@ -29631,14 +29353,16 @@ define('server/usercontext/wrappertemplate',[],function(){
     Bokeh.serverrun = require("server/serverrun");
     Bokeh.serverutils = require("server/serverutils");
     Bokeh.ColumnDataSource = require("source/column_data_source");
-    Bokeh.ObjectArrayDataSource = require("source/object_array_data_source");
     Bokeh.BoxSelectTool = require("tool/box_select_tool");
+    Bokeh.BoxZoomTool = require("tool/box_zoom_tool");
+    Bokeh.CrosshairTool = require("tool/crosshair_tool");
     Bokeh.DataRangeBoxSelectTool = require("tool/data_range_box_select_tool");
     Bokeh.EmbedTool = require("tool/embed_tool");
+    Bokeh.HoverTool = require("tool/hover_tool");
     Bokeh.PanTool = require("tool/pan_tool");
     Bokeh.PreviewSaveTool = require("tool/preview_save_tool");
+    Bokeh.ResetTool = require("tool/reset_tool");
     Bokeh.ResizeTool = require("tool/resize_tool");
-    Bokeh.CrosshairTool = require("tool/crosshair_tool");
     Bokeh.WheelZoomTool = require("tool/wheel_zoom_tool");
     Bokeh.DataSlider = require("widget/data_slider");
     Bokeh.server_page = require("server/serverrun").load;

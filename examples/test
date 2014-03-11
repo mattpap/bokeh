@@ -53,8 +53,9 @@ glyphs_excludes = set(["line_animate.py"])
 add_examples(glyphs_dir, excludes=glyphs_excludes|glyphs_server, etype='file')
 add_examples(glyphs_dir, includes=glyphs_server, etype='server')
 
-plotting_file_dir = os.path.join(base_dir, "plotting", "file")
-add_examples(plotting_file_dir, etype='file')
+plotting_file_dir = os.path.join("plotting", "file")
+glyphs_excludes = set(["image.py", "rgba_image.py"])
+add_examples(plotting_file_dir, etype='file', excludes=glyphs_excludes)
 
 plotting_server_dir = os.path.join(base_dir, "plotting", "server")
 plotting_server_excludes = set(["animated.py", "line_animate.py"])
@@ -121,7 +122,7 @@ try:
                 print("Failed to run: %s" % " ".join(cmd))
                 sys.exit(1)
 
-            result = json.loads(proc.stdout.read())
+            result = json.loads(proc.stdout.read().decode('utf-8'))
 
             status = result['status']
             errors = result['errors']

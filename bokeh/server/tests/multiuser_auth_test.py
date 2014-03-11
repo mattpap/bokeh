@@ -4,8 +4,11 @@ from . import test_utils
 import requests
 import tempfile
 from ...serverconfig import Server
+from unittest import skipIf
+import sys
 class TestRegister(test_utils.BokehServerTestCase):
     options = {'single_user_mode' : False}
+    @skipIf(sys.version_info[0] == 3, "gevent does not work in py3")
     def test_register(self):
         url = "http://localhost:5006/bokeh/register"
         session = requests.session()
@@ -15,13 +18,13 @@ class TestRegister(test_utils.BokehServerTestCase):
                               allow_redirects=False
                               )
         assert result.status_code == 302
-        # we redirect to bokeh on success, but we redirect to 
+        # we redirect to bokeh on success, but we redirect to
         # /bokeh/register on errror
         assert result.headers["location"] == 'http://localhost:5006/bokeh'
         url = "http://localhost:5006/bokeh/userinfo"
         userinfo = session.get(url).json()
         assert userinfo['username'] == 'testuser1'
-
+    @skipIf(sys.version_info[0] == 3, "gevent does not work in py3")
     def test_register_twice_should_fail(self):
         url = "http://localhost:5006/bokeh/register"
         session = requests.session()
@@ -31,7 +34,7 @@ class TestRegister(test_utils.BokehServerTestCase):
                               allow_redirects=False
                               )
         assert result.status_code == 302
-        # we redirect to bokeh on success, but we redirect to 
+        # we redirect to bokeh on success, but we redirect to
         # /bokeh/register on errror
         assert result.headers["location"] == 'http://localhost:5006/bokeh'
 
@@ -41,7 +44,7 @@ class TestRegister(test_utils.BokehServerTestCase):
                               allow_redirects=False
                               )
         assert result.status_code == 302
-        # we redirect to bokeh on success, but we redirect to 
+        # we redirect to bokeh on success, but we redirect to
         # /bokeh/register on errror
         assert result.headers["location"] == 'http://localhost:5006/bokeh/register'
 
@@ -49,6 +52,7 @@ class TestRegister(test_utils.BokehServerTestCase):
 
 class TestLogin(test_utils.BokehServerTestCase):
     options = {'single_user_mode' : False}
+    @skipIf(sys.version_info[0] == 3, "gevent does not work in py3")
     def test_login(self):
         username = "testuser2"
         password = "fluffy"
@@ -66,7 +70,7 @@ class TestLogin(test_utils.BokehServerTestCase):
                                          'password' : 'wrong password'},
                               allow_redirects=False
                               )
-        
+
         #haven't logged in yet, so this should  be 403
         url = "http://localhost:5006/bokeh/userinfo"
         result = session.get(url)
@@ -78,13 +82,14 @@ class TestLogin(test_utils.BokehServerTestCase):
                                          'password' : 'fluffy'},
                               allow_redirects=False
                               )
-        
+
         url = "http://localhost:5006/bokeh/userinfo"
         result = session.get(url).json()
         assert result['username'] == 'testuser2'
 
 class ServerConfigTestCase(test_utils.BokehServerTestCase):
-    options = {'single_user_mode' : False}    
+    options = {'single_user_mode' : False}
+    @skipIf(sys.version_info[0] == 3, "gevent does not work in py3")
     def test_register(self):
         #create a dummy config file
         config = tempfile.NamedTemporaryFile(mode="w+").name
@@ -103,7 +108,7 @@ class ServerConfigTestCase(test_utils.BokehServerTestCase):
                          )
         assert server2.userapikey == server.userapikey
         assert server2.root_url == server.root_url
-
+    @skipIf(sys.version_info[0] == 3, "gevent does not work in py3")
     def test_login(self):
         #create a server config, register a user
         config1 = tempfile.NamedTemporaryFile(mode="w+").name
@@ -113,7 +118,7 @@ class ServerConfigTestCase(test_utils.BokehServerTestCase):
         assert server.userapikey == "nokey"
         server.register("testuser", "fluffy")
         assert server.userapikey and server.userapikey != "nokey"
-        
+
         #create a separate server config, login a user
         config2 = tempfile.NamedTemporaryFile(mode="w+").name
         server2 = Server(name="foo", root_url="http://localhost:5006/",
@@ -123,4 +128,4 @@ class ServerConfigTestCase(test_utils.BokehServerTestCase):
         server2.login("testuser", "fluffy")
         #make sure the userapikeys match
         assert server2.userapikey == server.userapikey
-        
+
