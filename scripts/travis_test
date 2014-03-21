@@ -1,0 +1,15 @@
+#!/bin/bash
+
+python -c 'from bokeh import test; test()'
+TESTS_RESULT="$?"
+
+export BOKEH_SERVER_URL="http://localhost:$BOKEH_PORT/"
+examples/test --bokeh-port=$BOKEH_PORT --ipython-port=$IPYTHON_PORT --phantomjs=$HOME/phantomjs/bin/phantomjs
+EXAMPLES_RESULT="$?"
+
+cd sphinx
+make html
+SPHINX_RESULT="$?"
+cd ..
+
+exit [ $TESTS_RESULT && $EXAMPLES_RESULT && $SPHINX_RESULT ]

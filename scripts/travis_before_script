@@ -1,0 +1,9 @@
+#!/bin/bash
+
+./bokeh-server --port=$BOKEH_PORT --backend=$BOKEH_BACKEND &> bokeh.log &
+echo $! > bokeh.pid
+echo $BOKEH_PORT > bokeh.port
+
+ipython notebook --port=$IPYTHON_PORT examples/plotting/notebook/ &> ipython.log &
+echo $! > ipython.pid
+echo $IPYTHON_PORT > ipython.port

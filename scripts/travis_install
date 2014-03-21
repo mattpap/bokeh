@@ -1,0 +1,25 @@
+#!/bin/bash
+
+python -V
+
+DEPS_BOKEH="numpy pandas six requests dateutil"
+DEPS_SERVER="flask werkzeug greenlet gevent gevent-websocket"
+DEPS_DATA="PyYAML"
+DEPS_DOCS="sphinx pygments"
+DEPS_EXAMPLES="scipy"
+DEPS_TESTS="nose mock colorama" # websocket
+DEPS_IPYTHON="pyzmq"
+
+DEPS="$DEPS_BOKEH $DEPS_SERVER $DEPS_DATA $DEPS_DOCS $DEPS_EXAMPLES $DEPS_TESTS"
+
+conda install --yes pip $DEPS
+pip install websocket git+https://github.com/ipython/ipython.git@master
+
+cd bokehjs
+npm install && node_modules/.bin/grunt deploy || exit 1
+cd ..
+
+ln -s $(readlink -f bokehjs/build/js) bokeh/server/static/js
+ln -s $(readlink -f bokehjs/build/css) bokeh/server/static/css
+
+python -c 'import bokeh; bokeh.sampledata.download()' || exit 1
