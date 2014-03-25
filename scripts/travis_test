@@ -9,7 +9,10 @@ EXAMPLES_RESULT="$?"
 
 cd sphinx
 make html
-SPHINX_RESULT="$?"
+DOCS_RESULT="$?"
 cd ..
 
-exit [ $TESTS_RESULT && $EXAMPLES_RESULT && $SPHINX_RESULT ]
+if [[ $TESTS_RESULT -eq 1 -o $EXAMPLES_RESULT -eq 1 -o $DOCS_RESULT -eq 1 ]]
+then
+    exit 1
+fi

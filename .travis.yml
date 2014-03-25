@@ -10,8 +10,6 @@ before_install:
     - export BOKEH_PORT=10001
     - export IPYTHON_PORT=10002
     - export BOKEH_BACKEND=memory
-    - export PYTHONPATH=$(readlink -f .)
-    - scripts/travis_before_install
 
 install: scripts/travis_install
 
