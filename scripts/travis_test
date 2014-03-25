@@ -12,7 +12,7 @@ make html
 DOCS_RESULT="$?"
 cd ..
 
-if [[ $TESTS_RESULT -eq 1 -o $EXAMPLES_RESULT -eq 1 -o $DOCS_RESULT -eq 1 ]]
+if [ $TESTS_RESULT -ne 0 -o $EXAMPLES_RESULT -ne 0 -o $DOCS_RESULT -ne 0 ]
 then
     exit 1
 fi

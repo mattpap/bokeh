@@ -9,7 +9,7 @@ before_install:
     - export PHANTOMJS_VERSION="1.9.7"
     - export BOKEH_PORT=10001
     - export IPYTHON_PORT=10002
-    - export BOKEH_BACKEND=memory
+    - export BOKEH_BACKEND=redis
 
 install: scripts/travis_install
 

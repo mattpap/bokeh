@@ -1,6 +1,6 @@
 #!/bin/bash
 
-./bokeh-server --port=$BOKEH_PORT --backend=$BOKEH_BACKEND &> bokeh.log &
+./bokeh-server --bokeh-port=$BOKEH_PORT --backend=$BOKEH_BACKEND &> bokeh.log &
 echo $! > bokeh.pid
 echo $BOKEH_PORT > bokeh.port
 
