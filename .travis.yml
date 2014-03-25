@@ -7,14 +7,7 @@ before_install:
     - export PATH="$HOME/miniconda/bin:$PATH"
     - export MINICONDA_VERSION="3.3.0"
     - export PHANTOMJS_VERSION="1.9.7"
-    - export BOKEH_PORT=10001
-    - export IPYTHON_PORT=10002
-    - export BOKEH_BACKEND=redis
 
 install: scripts/travis_install
 
-before_script: scripts/travis_before_script
-
 script: scripts/travis_test
-
-after_script: scripts/travis_after_script

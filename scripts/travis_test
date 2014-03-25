@@ -1,18 +1,3 @@
 #!/bin/bash
 
-python -c 'from bokeh import test; test()'
-TESTS_RESULT="$?"
-
-export BOKEH_SERVER_URL="http://localhost:$BOKEH_PORT/"
-examples/test --bokeh-port=$BOKEH_PORT --ipython-port=$IPYTHON_PORT --phantomjs=$HOME/phantomjs/bin/phantomjs
-EXAMPLES_RESULT="$?"
-
-cd sphinx
-make html
-DOCS_RESULT="$?"
-cd ..
-
-if [ $TESTS_RESULT -ne 0 -o $EXAMPLES_RESULT -ne 0 -o $DOCS_RESULT -ne 0 ]
-then
-    exit 1
-fi
+nosetests

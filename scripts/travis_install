@@ -28,12 +28,16 @@ mkdir -p $INSTALL_DIR
 ln -s $(readlink -f bokeh) $INSTALL_DIR/bokeh
 
 DEPS_BOKEH="numpy pandas six requests dateutil"
-DEPS_SERVER="flask werkzeug greenlet gevent gevent-websocket redis redis-py"
+DEPS_SERVER="flask werkzeug greenlet redis redis-py"
 DEPS_DATA="PyYAML"
 DEPS_DOCS="sphinx pygments"
 DEPS_EXAMPLES="scipy"
 DEPS_TESTS="nose mock colorama" # websocket
-DEPS_IPYTHON="pyzmq"
+DEPS_IPYTHON="tornado pyzmq"
+
+if [[ "$TRAVIS_PYTHON_VERSION" == 2* ]]; then
+    DEPS_SERVER="$DEPS_SERVER gevent gevent-websocket"
+fi
 
 DEPS="$DEPS_BOKEH $DEPS_SERVER $DEPS_DATA $DEPS_DOCS $DEPS_EXAMPLES $DEPS_TESTS $DEPS_IPYTHON"
 
